@@ -272,29 +272,42 @@
                 setInventario([]);
             };
 
-            // GUARDAR TRANSACCIÓN (Envía 'descripcion' y 'desc' simultáneamente para evitar errores de caché)
+            // GUARDAR TRANSACCIÓN (Prueba con 'descripcion', y si Supabase insiste en caché, intenta con 'desc')
             const agregarMovimiento = async (e) => {
                 e.preventDefault();
                 if (!nuevoDesc.trim() || !nuevoMonto || !session) return;
                 
-                const item = {
+                const fechaActual = new Date().toISOString().split('T')[0];
+                const montoNum = parseFloat(nuevoMonto);
+
+                // Intento principal con 'descripcion'
+                let res = await supabaseClient.from('movimientos').insert([{
                     user_id: session.user.id,
                     tipo: nuevoTipo,
                     descripcion: nuevoDesc.trim(),
-                    desc: nuevoDesc.trim(),
-                    monto: parseFloat(nuevoMonto),
+                    monto: montoNum,
                     moneda: nuevaMoneda,
-                    fecha: new Date().toISOString().split('T')[0]
-                };
+                    fecha: fechaActual
+                }]).select();
 
-                const { data, error } = await supabaseClient.from('movimientos').insert([item]).select();
+                // Si da error de caché buscando 'desc', probamos enviando 'desc' directamente
+                if (res.error && res.error.message.includes("desc")) {
+                    res = await supabaseClient.from('movimientos').insert([{
+                        user_id: session.user.id,
+                        tipo: nuevoTipo,
+                        desc: nuevoDesc.trim(),
+                        monto: montoNum,
+                        moneda: nuevaMoneda,
+                        fecha: fechaActual
+                    }]).select();
+                }
 
-                if (!error && data) {
-                    setMovimientos([data[0], ...movimientos]);
+                if (!res.error && res.data) {
+                    setMovimientos([res.data[0], ...movimientos]);
                     setNuevoDesc('');
                     setNuevoMonto('');
                 } else {
-                    alert('Error en Supabase al guardar: ' + (error ? error.message : 'Desconocido'));
+                    alert('Error al guardar: ' + (res.error ? res.error.message : 'Error desconocido'));
                 }
             };
 
@@ -323,22 +336,30 @@
                 e.preventDefault();
                 if (!nuevoDeudaDesc.trim() || !nuevoDeudaMonto || !session) return;
 
-                const nuevaD = {
+                const montoDeudaNum = parseFloat(nuevoDeudaMonto);
+
+                let res = await supabaseClient.from('deudas').insert([{
                     user_id: session.user.id,
                     descripcion: nuevoDeudaDesc.trim(),
-                    desc: nuevoDeudaDesc.trim(),
-                    monto: parseFloat(nuevoDeudaMonto),
+                    monto: montoDeudaNum,
                     moneda: 'USD'
-                };
+                }]).select();
 
-                const { data, error } = await supabaseClient.from('deudas').insert([nuevaD]).select();
+                if (res.error && res.error.message.includes("desc")) {
+                    res = await supabaseClient.from('deudas').insert([{
+                        user_id: session.user.id,
+                        desc: nuevoDeudaDesc.trim(),
+                        monto: montoDeudaNum,
+                        moneda: 'USD'
+                    }]).select();
+                }
 
-                if (!error && data) {
-                    setDeudas([data[0], ...deudas]);
+                if (!res.error && res.data) {
+                    setDeudas([res.data[0], ...deudas]);
                     setNuevoDeudaDesc('');
                     setNuevoDeudaMonto('');
                 } else {
-                    alert('Error en Supabase al guardar deuda: ' + (error ? error.message : 'Desconocido'));
+                    alert('Error al guardar deuda: ' + (res.error ? res.error.message : 'Error'));
                 }
             };
 
@@ -367,17 +388,27 @@
                 }
 
                 // Registrar abono como gasto automáticamente
-                const itemGasto = {
+                const fechaActual = new Date().toISOString().split('T')[0];
+                let resGasto = await supabaseClient.from('movimientos').insert([{
                     user_id: session.user.id,
                     tipo: 'gasto',
                     descripcion: `Abono a deuda: ${nombreDeuda}`,
-                    desc: `Abono a deuda: ${nombreDeuda}`,
                     monto: abonoVal,
                     moneda: 'USD',
-                    fecha: new Date().toISOString().split('T')[0]
-                };
-                
-                await supabaseClient.from('movimientos').insert([itemGasto]);
+                    fecha: fechaActual
+                }]).select();
+
+                if (resGasto.error && resGasto.error.message.includes("desc")) {
+                    await supabaseClient.from('movimientos').insert([{
+                        user_id: session.user.id,
+                        tipo: 'gasto',
+                        desc: `Abono a deuda: ${nombreDeuda}`,
+                        monto: abonoVal,
+                        moneda: 'USD',
+                        fecha: fechaActual
+                    }]);
+                }
+
                 cargarDatos(session.user.id);
                 setMontoAbono({ ...montoAbono, [deuda.id]: '' });
             };
