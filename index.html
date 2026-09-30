@@ -2,8 +2,46 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>KreatiaPay & Finanzas</title>
+    
+    <!-- PWA Config & Meta Tags -->
+    <meta name="theme-color" content="#db2777">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KreatiaPay">
+    
+    <!-- Dynamic Manifest Injection -->
+    <script>
+        const manifestData = {
+            "name": "KreatiaPay & Finanzas",
+            "short_name": "KreatiaPay",
+            "start_url": "./",
+            "display": "standalone",
+            "background_color": "#fdf4f8",
+            "theme_color": "#db2777",
+            "icons": [
+                {
+                    "src": "https://img.icons8.com/color/192/192/diamond--v1.png",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                },
+                {
+                    "src": "https://img.icons8.com/color/512/512/diamond--v1.png",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                }
+            ]
+        };
+        const stringManifest = JSON.stringify(manifestData);
+        const blob = new Blob([stringManifest], {type: 'application/json'});
+        const manifestURL = URL.createObjectURL(blob);
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = manifestURL;
+        document.head.appendChild(link);
+    </script>
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -25,11 +63,9 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Supabase JS SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
-<body class="bg-kreatiaLight min-h-screen text-slate-800 flex flex-col justify-center items-center p-0 sm:p-4">
-    <div id="root" class="w-full max-w-md bg-white shadow-2xl min-h-screen sm:min-h-[85vh] sm:rounded-3xl flex flex-col justify-between overflow-hidden"></div>
+<body class="bg-kreatiaLight min-h-screen text-slate-800 flex flex-col justify-center items-center p-0 sm:p-4 select-none">
+    <div id="root" class="w-full max-w-md bg-white shadow-2xl min-h-screen sm:min-h-[85vh] sm:rounded-3xl flex flex-col justify-between overflow-hidden relative"></div>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
@@ -49,25 +85,54 @@
             const [authPassword, setAuthPassword] = useState('');
             const [isRegistering, setIsRegistering] = useState(false);
             const [authError, setAuthError] = useState('');
+            const [authSuccessMsg, setAuthSuccessMsg] = useState('');
+
+            // PWA Install Prompt
+            const [deferredPrompt, setDeferredPrompt] = useState(null);
+            const [isOnline, setIsOnline] = useState(navigator.onLine);
 
             // Estados de Tasas de Cambio
             const [tasaDolarBCV, setTasaDolarBCV] = useState(36.5);
             const [tasaEuroBCV, setTasaEuroBCV] = useState(39.8);
-            
-            // CÁLCULO AUTOMÁTICO DE TASA INTERMEDIA (Promedio Dólar y Euro BCV)
             const tasaIntermedia = Number(((tasaDolarBCV + tasaEuroBCV) / 2).toFixed(2));
 
-            // Pestañas
+            // Pestañas ('finanzas', 'inventario', 'calculadora', 'negocio', 'conversor')
             const [activeTab, setActiveTab] = useState('finanzas');
 
-            // Datos Financieros (Supabase)
+            // Datos Financieros y Estado
             const [movimientos, setMovimientos] = useState([]);
             const [deudas, setDeudas] = useState([]);
+            const [inventario, setInventario] = useState([]);
+            
+            // Buscador Inteligente de Inventario
+            const [busquedaInventario, setBusquedaInventario] = useState('');
+
+            // Papeleras con opción de deshacer
+            const [papeleraMov, setPapeleraMov] = useState(null);
+            const [papeleraInv, setPapeleraInv] = useState(null);
+
+            // Filtros de Historial por Fechas
+            const [filtroFechaInicio, setFiltroFechaInicio] = useState('');
+            const [filtroFechaFin, setFiltroFechaFin] = useState('');
+
+            // Formularios
             const [nuevoDeudaDesc, setNuevoDeudaDesc] = useState('');
             const [nuevoDeudaMonto, setNuevoDeudaMonto] = useState('');
-            const [papelera, setPapelera] = useState(null);
+            
+            const [nuevoDesc, setNuevoDesc] = useState('');
+            const [nuevoMonto, setNuevoMonto] = useState('');
+            const [nuevaMoneda, setNuevaMoneda] = useState('USD');
+            const [nuevoTipo, setNuevoTipo] = useState('ingreso');
 
-            // Calculadora de precios
+            // Formulario de Inventario (Crear / Editar)
+            const [editandoInvId, setEditandoInvId] = useState(null);
+            const [invNombre, setInvNombre] = useState('');
+            const [invStock, setInvStock] = useState('');
+            const [invCosto, setInvCosto] = useState('');
+            const [invMargen, setInvMargen] = useState(30); // Margen individual por producto
+            const [invImagen, setInvImagen] = useState('');
+
+            // Calculadora de precios general
             const [calcInsumo, setCalcInsumo] = useState('');
             const [calcCantidad, setCalcCantidad] = useState(1);
             const [calcMargen, setCalcMargen] = useState(30);
@@ -75,15 +140,26 @@
             // Conversor Rápido
             const [montoConversor, setMontoConversor] = useState('');
             const [tipoMonedaConversor, setTipoMonedaConversor] = useState('USD');
-            const [tipoTasaUsada, setTipoTasaUsada] = useState('intermedia'); // 'dolar', 'euro', 'intermedia'
-
-            // Formulario de Transacción
-            const [nuevoDesc, setNuevoDesc] = useState('');
-            const [nuevoMonto, setNuevoMonto] = useState('');
-            const [nuevaMoneda, setNuevaMoneda] = useState('USD');
-            const [nuevoTipo, setNuevoTipo] = useState('ingreso');
+            const [tipoTasaUsada, setTipoTasaUsada] = useState('intermedia');
 
             useEffect(() => {
+                if ('serviceWorker' in navigator) {
+                    window.addEventListener('load', () => {
+                        navigator.serviceWorker.register('./sw.js').catch(() => {});
+                    });
+                }
+
+                const handleOnline = () => setIsOnline(true);
+                const handleOffline = () => setIsOnline(false);
+                window.addEventListener('online', handleOnline);
+                window.addEventListener('offline', handleOffline);
+
+                const handleBeforeInstallPrompt = (e) => {
+                    e.preventDefault();
+                    setDeferredPrompt(e);
+                };
+                window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
                     setSession(session);
                     setLoadingAuth(false);
@@ -95,41 +171,46 @@
                     if (session) cargarDatos(session.user.id);
                 });
 
-                return () => subscription.unsubscribe();
+                return () => {
+                    subscription.unsubscribe();
+                    window.removeEventListener('online', handleOnline);
+                    window.removeEventListener('offline', handleOffline);
+                    window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+                };
             }, []);
 
-            useEffect(() => {
-                if (window.lucide) {
-                    window.lucide.createIcons();
-                }
-            });
+            const handleInstallClick = async () => {
+                if (!deferredPrompt) return;
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') setDeferredPrompt(null);
+            };
 
             const cargarDatos = async (userId) => {
-                const { data: movData, error: movError } = await supabaseClient
-                    .from('movimientos')
-                    .select('*')
-                    .eq('user_id', userId)
-                    .order('created_at', { ascending: false });
-                
-                if (!movError && movData) setMovimientos(movData);
+                const { data: movData } = await supabaseClient.from('movimientos').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+                if (movData) setMovimientos(movData);
 
-                const { data: deuData, error: deuError } = await supabaseClient
-                    .from('deudas')
-                    .select('*')
-                    .eq('user_id', userId)
-                    .order('created_at', { ascending: false });
-                
-                if (!deuError && deuData) setDeudas(deuData);
+                const { data: deuData } = await supabaseClient.from('deudas').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+                if (deuData) setDeudas(deuData);
+
+                const { data: invData, error: invError } = await supabaseClient.from('inventario').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+                if (!invError && invData) setInventario(invData);
             };
 
             const handleAuth = async (e) => {
                 e.preventDefault();
                 setAuthError('');
+                setAuthSuccessMsg('');
                 try {
                     if (isRegistering) {
-                        const { error } = await supabaseClient.auth.signUp({ email: authEmail, password: authPassword });
+                        const { data, error } = await supabaseClient.auth.signUp({ email: authEmail, password: authPassword });
                         if (error) throw error;
-                        alert('¡Registro exitoso! Revisa tu correo o inicia sesión.');
+                        if (data?.session) {
+                            setSession(data.session);
+                        } else {
+                            setAuthSuccessMsg('¡Registro exitoso! Inicia sesión con tus datos.');
+                            setIsRegistering(false);
+                        }
                     } else {
                         const { error } = await supabaseClient.auth.signInWithPassword({ email: authEmail, password: authPassword });
                         if (error) throw error;
@@ -143,8 +224,10 @@
                 await supabaseClient.auth.signOut();
                 setMovimientos([]);
                 setDeudas([]);
+                setInventario([]);
             };
 
+            // Finanzas: Movimientos
             const agregarMovimiento = async (e) => {
                 e.preventDefault();
                 if (!nuevoDesc || !nuevoMonto || !session) return;
@@ -163,8 +246,6 @@
                     setMovimientos([data[0], ...movimientos]);
                     setNuevoDesc('');
                     setNuevoMonto('');
-                } else {
-                    alert('Error al guardar el movimiento: ' + (error?.message || 'Desconocido'));
                 }
             };
 
@@ -172,22 +253,23 @@
                 const itemABorrar = movimientos.find(m => m.id === id);
                 const { error } = await supabaseClient.from('movimientos').delete().eq('id', id);
                 if (!error) {
-                    setPapelera(itemABorrar);
+                    setPapeleraMov(itemABorrar);
                     setMovimientos(movimientos.filter(m => m.id !== id));
                 }
             };
 
-            const deshacerBorrado = async () => {
-                if (papelera && session) {
-                    const { id, ...rest } = papelera;
+            const deshacerBorradoMov = async () => {
+                if (papeleraMov && session) {
+                    const { id, ...rest } = papeleraMov;
                     const { data, error } = await supabaseClient.from('movimientos').insert([{ ...rest, user_id: session.user.id }]).select();
                     if (!error && data) {
                         setMovimientos([data[0], ...movimientos]);
-                        setPapelera(null);
+                        setPapeleraMov(null);
                     }
                 }
             };
 
+            // Deudas
             const agregarDeuda = async (e) => {
                 e.preventDefault();
                 if (!nuevoDeudaDesc || !nuevoDeudaMonto || !session) return;
@@ -209,41 +291,149 @@
 
             const eliminarDeuda = async (id) => {
                 const { error } = await supabaseClient.from('deudas').delete().eq('id', id);
-                if (!error) {
-                    setDeudas(deudas.filter(d => d.id !== id));
+                if (!error) setDeudas(deudas.filter(d => d.id !== id));
+            };
+
+            // Inventario
+            const guardarProductoInventario = async (e) => {
+                e.preventDefault();
+                if (!invNombre || !invStock || !invCosto || !session) return;
+
+                const productoData = {
+                    user_id: session.user.id,
+                    nombre: invNombre,
+                    stock: parseInt(invStock),
+                    precio: parseFloat(invCosto), // Guardamos el costo unitario base
+                    margen: parseFloat(invMargen) || 30, // Margen individual
+                    imagen: invImagen || 'https://img.icons8.com/color/96/box.png'
+                };
+
+                if (editandoInvId) {
+                    const { error } = await supabaseClient.from('inventario').update(productoData).eq('id', editandoInvId);
+                    if (!error) {
+                        setInventario(inventario.map(p => p.id === editandoInvId ? { ...p, ...productoData } : p));
+                        cancelarEdicionInv();
+                    }
+                } else {
+                    const { data, error } = await supabaseClient.from('inventario').insert([productoData]).select();
+                    if (!error && data) {
+                        setInventario([data[0], ...inventario]);
+                        cancelarEdicionInv();
+                    }
                 }
             };
 
+            const prepararEdicionInv = (prod) => {
+                setEditandoInvId(prod.id);
+                setInvNombre(prod.nombre);
+                setInvStock(prod.stock);
+                setInvCosto(prod.precio);
+                setInvMargen(prod.margen || 30);
+                setInvImagen(prod.imagen);
+            };
+
+            const cancelarEdicionInv = () => {
+                setEditandoInvId(null);
+                setInvNombre('');
+                setInvStock('');
+                setInvCosto('');
+                setInvMargen(30);
+                setInvImagen('');
+            };
+
+            const eliminarProductoInv = async (id) => {
+                const prodABorrar = inventario.find(p => p.id === id);
+                const { error } = await supabaseClient.from('inventario').delete().eq('id', id);
+                if (!error) {
+                    setPapeleraInv(prodABorrar);
+                    setInventario(inventario.filter(p => p.id !== id));
+                }
+            };
+
+            const deshacerBorradoInv = async () => {
+                if (papeleraInv && session) {
+                    const { id, ...rest } = papeleraInv;
+                    const { data, error } = await supabaseClient.from('inventario').insert([{ ...rest, user_id: session.user.id }]).select();
+                    if (!error && data) {
+                        setInventario([data[0], ...inventario]);
+                        setPapeleraInv(null);
+                    }
+                }
+            };
+
+            // Inventario Filtrado por Buscador Inteligente
+            const inventarioFiltrado = inventario.filter(prod => 
+                prod.nombre.toLowerCase().includes(busquedaInventario.toLowerCase())
+            );
+
+            // Exportar Excel / CSV
+            const exportarExcelCSV = () => {
+                if (movimientos.length === 0) {
+                    alert('No hay movimientos para exportar.');
+                    return;
+                }
+                let csvContent = "data:text/csv;charset=utf-8,ID,Fecha,Tipo,Descripcion,Monto,Moneda\r\n";
+                movimientos.forEach(m => {
+                    csvContent += `${m.id},${m.fecha},${m.tipo},"${m.desc.replace(/"/g, '""')}",${m.monto},${m.moneda}\r\n`;
+                });
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `KreatiaPay_Reporte_${new Date().toISOString().split('T')[0]}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            const movimientosFiltrados = movimientos.filter(m => {
+                if (!filtroFechaInicio && !filtroFechaFin) return true;
+                if (filtroFechaInicio && m.fecha < filtroFechaInicio) return false;
+                if (filtroFechaFin && m.fecha > filtroFechaFin) return false;
+                return true;
+            });
+
+            const totalIngresosUSD = movimientos.filter(m => m.tipo === 'ingreso').reduce((acc, m) => acc + (m.moneda === 'USD' ? m.monto : m.monto / tasaIntermedia), 0);
+            const totalGastosUSD = movimientos.filter(m => m.tipo === 'gasto').reduce((acc, m) => acc + (m.moneda === 'USD' ? m.monto : m.monto / tasaIntermedia), 0);
+            const balanceNetoUSD = totalIngresosUSD - totalGastosUSD;
+            const sueldoRecomendado = balanceNetoUSD > 0 ? balanceNetoUSD * 0.30 : 0;
+            const ahorroRecomendado = balanceNetoUSD > 0 ? balanceNetoUSD * 0.20 : 0;
+
             if (loadingAuth) {
-                return <div className="flex-1 flex justify-center items-center p-10 text-kreatiaPink font-bold">Cargando KreatiaPay... ✨</div>;
+                return (
+                    <div className="flex-1 flex flex-col justify-center items-center p-10 space-y-3">
+                        <div className="w-10 h-10 border-4 border-kreatiaPink border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-xs text-kreatiaPink font-bold tracking-wider">Cargando KreatiaPay ✨...</p>
+                    </div>
+                );
             }
 
-            // PANTALLA DE AUTENTICACIÓN
             if (!session) {
                 return (
                     <div className="flex-1 flex flex-col justify-center p-6 bg-white">
                         <div className="text-center mb-6">
-                            <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-kreatiaPink to-kreatiaPurple">KreatiaPay ✨</h1>
-                            <p className="text-xs text-slate-500 mt-1">Tu plataforma financiera inteligente para Venezuela</p>
+                            <span className="text-4xl">💎</span>
+                            <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-kreatiaPink to-kreatiaPurple mt-2">KreatiaPay ✨</h1>
+                            <p className="text-xs text-slate-500 mt-1">Plataforma financiera y de inventario para emprendedores</p>
                         </div>
 
                         <form onSubmit={handleAuth} className="space-y-4">
-                            {authError && <div className="bg-rose-50 text-rose-600 p-3 rounded-xl text-xs">{authError}</div>}
+                            {authError && <div className="bg-rose-50 text-rose-600 p-3 rounded-2xl text-xs font-medium">{authError}</div>}
+                            {authSuccessMsg && <div className="bg-emerald-50 text-emerald-700 p-3 rounded-2xl text-xs font-medium">{authSuccessMsg}</div>}
                             <div>
                                 <label className="text-xs font-bold text-slate-600 block mb-1">Correo electrónico</label>
-                                <input type="email" required value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="tucorreo@emprendimiento.com" className="w-full p-3 text-xs rounded-xl border border-slate-200 outline-none focus:border-kreatiaPink" />
+                                <input type="email" required value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="tucorreo@emprendimiento.com" className="w-full p-3.5 text-xs rounded-2xl border border-slate-200 outline-none focus:border-kreatiaPink bg-slate-50/50" />
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-600 block mb-1">Contraseña</label>
-                                <input type="password" required value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="••••••••" className="w-full p-3 text-xs rounded-xl border border-slate-200 outline-none focus:border-kreatiaPink" />
+                                <input type="password" required value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="••••••••" className="w-full p-3.5 text-xs rounded-2xl border border-slate-200 outline-none focus:border-kreatiaPink bg-slate-50/50" />
                             </div>
-                            <button type="submit" className="w-full bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white py-3 rounded-xl text-xs font-bold shadow-md hover:opacity-90 transition">
+                            <button type="submit" className="w-full bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white py-3.5 rounded-2xl text-xs font-bold shadow-lg hover:opacity-90 transition">
                                 {isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
                             </button>
                         </form>
 
-                        <div className="text-center mt-4">
-                            <button onClick={()=>setIsRegistering(!isRegistering)} className="text-xs text-kreatiaPurple font-semibold hover:underline">
+                        <div className="text-center mt-6">
+                            <button onClick={()=>{setIsRegistering(!isRegistering); setAuthError(''); setAuthSuccessMsg('');}} className="text-xs text-kreatiaPurple font-semibold hover:underline">
                                 {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate aquí'}
                             </button>
                         </div>
@@ -251,19 +441,28 @@
                 );
             }
 
-            // APLICACIÓN PRINCIPAL
             return (
-                <div className="flex flex-col justify-between h-full">
-                    {/* Encabezado */}
-                    <header className="bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white p-5 sm:rounded-t-3xl shadow-lg">
-                        <div className="flex justify-between items-center mb-2">
-                            <h1 className="text-xl font-bold tracking-wide">KreatiaPay ✨</h1>
-                            <button onClick={logout} className="text-[10px] bg-white/20 px-2.5 py-1 rounded-full font-medium hover:bg-white/30 transition">Cerrar Sesión</button>
+                <div className="flex flex-col justify-between h-full bg-white">
+                    {!isOnline && (
+                        <div className="bg-amber-500 text-white text-[10px] text-center font-bold py-1 px-2">
+                            ⚠ Estás sin conexión. Los cambios se sincronizarán al reconectar.
                         </div>
-                        <p className="text-[11px] text-pink-100">Control inteligente de tasas y deudas al instante.</p>
+                    )}
+
+                    <header className="bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white p-4 sm:rounded-t-3xl shadow-lg relative">
+                        <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-lg font-extrabold tracking-wide">KreatiaPay ✨</h1>
+                                {deferredPrompt && (
+                                    <button onClick={handleInstallClick} className="bg-white/30 hover:bg-white/40 text-white text-[10px] px-2.5 py-0.5 rounded-full font-bold transition">
+                                        📲 Instalar
+                                    </button>
+                                )}
+                            </div>
+                            <button onClick={logout} className="text-[10px] bg-white/20 px-2.5 py-1 rounded-full font-medium hover:bg-white/30 transition">Salir</button>
+                        </div>
                         
-                        {/* Selector de Tasas + Tasa Intermedia Automática */}
-                        <div className="grid grid-cols-3 gap-2 mt-3 bg-white/10 p-2.5 rounded-xl backdrop-blur-sm text-center">
+                        <div className="grid grid-cols-3 gap-2 mt-2 bg-white/10 p-2 rounded-2xl backdrop-blur-sm text-center border border-white/10">
                             <div>
                                 <span className="text-[10px] block text-pink-200">BCV Dólar</span>
                                 <input type="number" step="0.1" value={tasaDolarBCV} onChange={(e)=>setTasaDolarBCV(parseFloat(e.target.value)||0)} className="bg-transparent text-center font-bold text-xs w-full outline-none border-b border-white/30" />
@@ -273,41 +472,45 @@
                                 <input type="number" step="0.1" value={tasaEuroBCV} onChange={(e)=>setTasaEuroBCV(parseFloat(e.target.value)||0)} className="bg-transparent text-center font-bold text-xs w-full outline-none border-b border-white/30" />
                             </div>
                             <div>
-                                <span className="text-[10px] block text-pink-200">Intermedia (Auto)</span>
-                                <span className="text-sm font-black text-pink-300 block pt-1">Bs. {tasaIntermedia}</span>
+                                <span className="text-[10px] block text-pink-200">Intermedia</span>
+                                <span className="text-xs font-black text-pink-200 block pt-1">Bs. {tasaIntermedia}</span>
                             </div>
                         </div>
                     </header>
 
                     {/* Pestañas */}
-                    <div className="flex border-b border-slate-100">
-                        <button onClick={()=>setActiveTab('finanzas')} className={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='finanzas' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
-                            💰 Finanzas & Deudas
+                    <div className="flex border-b border-slate-100 bg-slate-50/60 overflow-x-auto text-[11px]">
+                        <button onClick={()=>setActiveTab('finanzas')} className={`flex-1 py-2.5 px-2 font-bold text-center border-b-2 whitespace-nowrap transition ${activeTab==='finanzas' ? 'border-kreatiaPink text-kreatiaPink bg-white' : 'border-transparent text-slate-400'}`}>
+                            💰 Finanzas
                         </button>
-                        <button onClick={()=>setActiveTab('calculadora')} className={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='calculadora' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
-                            📐 Calculadora Precios
+                        <button onClick={()=>setActiveTab('inventario')} className={`flex-1 py-2.5 px-2 font-bold text-center border-b-2 whitespace-nowrap transition ${activeTab==='inventario' ? 'border-kreatiaPink text-kreatiaPink bg-white' : 'border-transparent text-slate-400'}`}>
+                            📦 Inventario & Ventas
                         </button>
-                        <button onClick={()=>setActiveTab('conversor')} className={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='conversor' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
+                        <button onClick={()=>setActiveTab('negocio')} className={`flex-1 py-2.5 px-2 font-bold text-center border-b-2 whitespace-nowrap transition ${activeTab==='negocio' ? 'border-kreatiaPink text-kreatiaPink bg-white' : 'border-transparent text-slate-400'}`}>
+                            📊 Negocio
+                        </button>
+                        <button onClick={()=>setActiveTab('calculadora')} className={`flex-1 py-2.5 px-2 font-bold text-center border-b-2 whitespace-nowrap transition ${activeTab==='calculadora' ? 'border-kreatiaPink text-kreatiaPink bg-white' : 'border-transparent text-slate-400'}`}>
+                            📐 Precios
+                        </button>
+                        <button onClick={()=>setActiveTab('conversor')} className={`flex-1 py-2.5 px-2 font-bold text-center border-b-2 whitespace-nowrap transition ${activeTab==='conversor' ? 'border-kreatiaPink text-kreatiaPink bg-white' : 'border-transparent text-slate-400'}`}>
                             💱 Conversor
                         </button>
                     </div>
 
-                    {/* Contenido */}
                     <main className="p-4 flex-1 overflow-y-auto space-y-4">
-                        {activeTab === 'finanzas' ? (
+                        {activeTab === 'finanzas' && (
                             <div className="space-y-4">
-                                {papelera && (
-                                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex justify-between items-center text-xs text-amber-800">
+                                {papeleraMov && (
+                                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex justify-between items-center text-xs text-amber-800">
                                         <span>Movimiento eliminado.</span>
-                                        <button onClick={deshacerBorrado} className="bg-amber-600 text-white px-3 py-1 rounded-lg font-bold">Deshacer</button>
+                                        <button onClick={deshacerBorradoMov} className="bg-amber-600 text-white px-3 py-1 rounded-xl font-bold">Deshacer</button>
                                     </div>
                                 )}
 
-                                {/* Deudas */}
-                                <div className="bg-purple-50 p-3.5 rounded-2xl border border-purple-100 space-y-2">
-                                    <h2 className="text-xs font-bold uppercase tracking-wider text-kreatiaPurple mb-1">📌 Deudas Pendientes</h2>
+                                <div className="bg-purple-50 p-3.5 rounded-3xl border border-purple-100 space-y-2">
+                                    <h2 className="text-xs font-extrabold uppercase tracking-wider text-kreatiaPurple mb-1">📌 Deudas Pendientes</h2>
                                     {deudas.map(d => (
-                                        <div key={d.id} className="flex justify-between items-center bg-white p-2.5 rounded-xl shadow-sm text-xs">
+                                        <div key={d.id} className="flex justify-between items-center bg-white p-2.5 rounded-2xl shadow-sm text-xs">
                                             <span className="text-slate-600 font-medium">{d.desc}</span>
                                             <div className="flex items-center gap-2">
                                                 <span className="font-bold text-rose-600">${d.monto.toFixed(2)} USD</span>
@@ -316,75 +519,234 @@
                                         </div>
                                     ))}
                                     <form onSubmit={agregarDeuda} className="flex gap-2 pt-1">
-                                        <input type="text" placeholder="Nueva deuda (ej. Proveedor)" value={nuevoDeudaDesc} onChange={(e)=>setNuevoDeudaDesc(e.target.value)} className="flex-1 p-2 text-xs rounded-xl border border-purple-200 bg-white outline-none" />
-                                        <input type="number" step="0.01" placeholder="Monto $" value={nuevoDeudaMonto} onChange={(e)=>setNuevoDeudaMonto(e.target.value)} className="w-20 p-2 text-xs rounded-xl border border-purple-200 bg-white outline-none" />
-                                        <button type="submit" className="bg-kreatiaPurple text-white px-3 py-2 rounded-xl text-xs font-bold">+</button>
+                                        <input type="text" placeholder="Nueva deuda" value={nuevoDeudaDesc} onChange={(e)=>setNuevoDeudaDesc(e.target.value)} className="flex-1 p-2.5 text-xs rounded-2xl border border-purple-200 bg-white outline-none" />
+                                        <input type="number" step="0.01" placeholder="Monto $" value={nuevoDeudaMonto} onChange={(e)=>setNuevoDeudaMonto(e.target.value)} className="w-20 p-2.5 text-xs rounded-2xl border border-purple-200 bg-white outline-none" />
+                                        <button type="submit" className="bg-kreatiaPurple text-white px-3.5 py-2.5 rounded-2xl text-xs font-bold">+</button>
                                     </form>
                                 </div>
 
-                                {/* Formulario Transacción */}
-                                <form onSubmit={agregarMovimiento} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2.5">
-                                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">➕ Registrar Transacción</h2>
+                                <form onSubmit={agregarMovimiento} className="bg-slate-50 p-4 rounded-3xl border border-slate-100 space-y-2.5">
+                                    <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">➕ Registrar Transacción</h2>
                                     <div className="flex gap-2">
-                                        <select value={nuevoTipo} onChange={(e)=>setNuevoTipo(e.target.value)} className="p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                        <select value={nuevoTipo} onChange={(e)=>setNuevoTipo(e.target.value)} className="p-2.5 text-xs rounded-2xl border border-slate-200 bg-white font-medium">
                                             <option value="ingreso">Ingreso</option>
                                             <option value="gasto">Gasto</option>
                                         </select>
-                                        <input type="text" placeholder="Descripción (ej. Venta tazas)" value={nuevoDesc} onChange={(e)=>setNuevoDesc(e.target.value)} className="flex-1 p-2 text-xs rounded-xl border border-slate-200 outline-none" />
+                                        <input type="text" placeholder="Descripción (ej. Venta tazas)" value={nuevoDesc} onChange={(e)=>setNuevoDesc(e.target.value)} className="flex-1 p-2.5 text-xs rounded-2xl border border-slate-200 bg-white outline-none" />
                                     </div>
                                     <div className="flex gap-2">
-                                        <input type="number" step="0.01" placeholder="Monto" value={nuevoMonto} onChange={(e)=>setNuevoMonto(e.target.value)} className="flex-1 p-2 text-xs rounded-xl border border-slate-200 outline-none" />
-                                        <select value={nuevaMoneda} onChange={(e)=>setNuevaMoneda(e.target.value)} className="p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                        <input type="number" step="0.01" placeholder="Monto" value={nuevoMonto} onChange={(e)=>setNuevoMonto(e.target.value)} className="flex-1 p-2.5 text-xs rounded-2xl border border-slate-200 bg-white outline-none" />
+                                        <select value={nuevaMoneda} onChange={(e)=>setNuevaMoneda(e.target.value)} className="p-2.5 text-xs rounded-2xl border border-slate-200 bg-white font-medium">
                                             <option value="USD">USD ($)</option>
                                             <option value="BS">Bolívares (Bs)</option>
                                         </select>
-                                        <button type="submit" className="bg-kreatiaPink text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-pink-700 transition">Guardar</button>
+                                        <button type="submit" className="bg-kreatiaPink text-white px-4 py-2.5 rounded-2xl text-xs font-bold shadow-md hover:opacity-90 transition">Guardar</button>
                                     </div>
                                 </form>
 
-                                {/* Historial */}
-                                <div>
-                                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">📜 Historial</h2>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">📜 Historial</h2>
+                                        <button onClick={exportarExcelCSV} className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl shadow transition flex items-center gap-1">
+                                            📊 Exportar Excel (CSV)
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-slate-100 p-2.5 rounded-2xl flex gap-2 items-center text-xs">
+                                        <span className="text-[10px] font-bold text-slate-500">Filtrar:</span>
+                                        <input type="date" value={filtroFechaInicio} onChange={(e)=>setFiltroFechaInicio(e.target.value)} className="p-1.5 rounded-xl bg-white border border-slate-200 text-[10px]" />
+                                        <span className="text-slate-400">a</span>
+                                        <input type="date" value={filtroFechaFin} onChange={(e)=>setFiltroFechaFin(e.target.value)} className="p-1.5 rounded-xl bg-white border border-slate-200 text-[10px]" />
+                                        {(filtroFechaInicio || filtroFechaFin) && (
+                                            <button onClick={()=>{setFiltroFechaInicio(''); setFiltroFechaFin('');}} className="text-rose-500 font-bold text-[10px] ml-auto">Limpiar</button>
+                                        )}
+                                    </div>
+
                                     <div className="space-y-2">
-                                        {movimientos.map(m => (
-                                            <div key={m.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-                                                <div>
-                                                    <p className="text-xs font-bold text-slate-700">{m.desc}</p>
-                                                    <span className="text-[10px] text-slate-400">{m.fecha}</span>
+                                        {movimientosFiltrados.length === 0 ? (
+                                            <p className="text-xs text-slate-400 text-center py-4">No se encontraron movimientos.</p>
+                                        ) : (
+                                            movimientosFiltrados.map(m => (
+                                                <div key={m.id} className="flex justify-between items-center bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                                                    <div>
+                                                        <p className="text-xs font-bold text-slate-700">{m.desc}</p>
+                                                        <span className="text-[10px] text-slate-400">{m.fecha}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`text-xs font-extrabold ${m.tipo==='ingreso'?'text-emerald-600':'text-rose-600'}`}>
+                                                            {m.tipo==='ingreso'?'+':'-'}{m.monto.toFixed(2)} {m.moneda}
+                                                        </span>
+                                                        <button onClick={()=>eliminarMovimiento(m.id)} className="text-slate-300 hover:text-rose-500 text-xs font-bold">✕</button>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-3">
-                                                    <span className={`text-xs font-bold ${m.tipo==='ingreso'?'text-emerald-600':'text-rose-600'}`}>
-                                                        {m.tipo==='ingreso'?'+':'-'}{m.monto.toFixed(2)} {m.moneda}
-                                                    </span>
-                                                    <button onClick={()=>eliminarMovimiento(m.id)} className="text-slate-300 hover:text-rose-500 text-xs font-bold">✕</button>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            ))
+                                        )}
                                     </div>
                                 </div>
                             </div>
-                        ) : activeTab === 'calculadora' ? (
-                            /* Calculadora de Precios */
+                        )}
+
+                        {activeTab === 'inventario' && (
                             <div className="space-y-4">
-                                <div className="bg-pink-50 p-4 rounded-2xl border border-pink-100 space-y-3">
-                                    <h2 className="text-xs font-bold uppercase tracking-wider text-kreatiaPink">💡 Calculadora Inteligente</h2>
+                                {papeleraInv && (
+                                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex justify-between items-center text-xs text-amber-800">
+                                        <span>Producto "{papeleraInv.nombre}" eliminado.</span>
+                                        <button onClick={deshacerBorradoInv} className="bg-amber-600 text-white px-3 py-1 rounded-xl font-bold">Deshacer</button>
+                                    </div>
+                                )}
+
+                                {/* Formulario Crear / Editar Inventario */}
+                                <form onSubmit={guardarProductoInventario} className="bg-pink-50/70 p-4 rounded-3xl border border-pink-100 space-y-3">
+                                    <h2 className="text-xs font-extrabold uppercase tracking-wider text-kreatiaPink">
+                                        {editandoInvId ? '✏️ Editar Producto' : '📦 Registrar Producto en Stock'}
+                                    </h2>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input type="text" placeholder="Nombre (ej. Tazas)" value={invNombre} onChange={(e)=>setInvNombre(e.target.value)} required className="p-2.5 text-xs rounded-2xl border border-slate-200 bg-white outline-none" />
+                                        <input type="number" placeholder="Stock disponible" value={invStock} onChange={(e)=>setInvStock(e.target.value)} required className="p-2.5 text-xs rounded-2xl border border-slate-200 bg-white outline-none" />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <input type="number" step="0.01" placeholder="Costo Base ($)" value={invCosto} onChange={(e)=>setInvCosto(e.target.value)} required className="p-2.5 text-xs rounded-2xl border border-slate-200 bg-white outline-none" />
+                                        <input type="number" placeholder="Margen %" value={invMargen} onChange={(e)=>setInvMargen(e.target.value)} required className="p-2.5 text-xs rounded-2xl border border-slate-200 bg-white outline-none" />
+                                        <input type="text" placeholder="URL Imagen" value={invImagen} onChange={(e)=>setInvImagen(e.target.value)} className="p-2.5 text-xs rounded-2xl border border-slate-200 bg-white outline-none" />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button type="submit" className="flex-1 bg-kreatiaPink text-white py-2.5 rounded-2xl text-xs font-bold shadow hover:bg-pink-700 transition">
+                                            {editandoInvId ? 'Actualizar Producto' : 'Guardar en Stock'}
+                                        </button>
+                                        {editandoInvId && (
+                                            <button type="button" onClick={cancelarEdicionInv} className="bg-slate-300 text-slate-700 px-4 py-2.5 rounded-2xl text-xs font-bold">Cancelar</button>
+                                        )}
+                                    </div>
+                                </form>
+
+                                {/* 🔍 BUSCADOR INTELIGENTE */}
+                                <div className="space-y-3">
+                                    <div className="relative">
+                                        <input 
+                                            type="text" 
+                                            placeholder="🔍 Buscar producto en inventario (ej. tazas, libretas)..." 
+                                            value={busquedaInventario} 
+                                            onChange={(e)=>setBusquedaInventario(e.target.value)} 
+                                            className="w-full p-3 pl-9 text-xs rounded-2xl border border-slate-200 bg-slate-50 outline-none focus:border-kreatiaPink font-medium shadow-sm" 
+                                        />
+                                        <span className="absolute left-3 top-3 text-slate-400 text-xs">🔎</span>
+                                    </div>
+
+                                    <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                                        📋 Resultados de Inventario y Ganancias
+                                    </h2>
+
+                                    {inventarioFiltrado.length === 0 ? (
+                                        <p className="text-xs text-slate-400 text-center py-6">No se encontraron productos.</p>
+                                    ) : (
+                                        inventarioFiltrado.map(prod => {
+                                            const costoBase = prod.precio || 0;
+                                            const margenProd = prod.margen || 30;
+                                            const precioVentaUSD = costoBase * (1 + margenProd / 100);
+                                            const gananciaUSD = precioVentaUSD - costoBase;
+                                            const precioVentaBS = precioVentaUSD * tasaIntermedia;
+                                            const gananciaBS = gananciaUSD * tasaIntermedia;
+
+                                            return (
+                                                <div key={prod.id} className="bg-white p-3.5 rounded-3xl border border-slate-100 shadow-sm space-y-2.5 hover:shadow-md transition">
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-3">
+                                                            <img src={prod.imagen} alt="" className="w-12 h-12 object-cover rounded-2xl border border-slate-100 bg-slate-50" />
+                                                            <div>
+                                                                <p className="text-xs font-bold text-slate-800">{prod.nombre}</p>
+                                                                <span className="text-[10px] text-slate-400 font-medium">Stock: <strong className="text-kreatiaPurple">{prod.stock} uds</strong> | Costo: ${costoBase.toFixed(2)}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <button onClick={()=>prepararEdicionInv(prod)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition">Editar</button>
+                                                            <button onClick={()=>eliminarProductoInv(prod.id)} className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition">Borrar</button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Panel Inteligente de Precios y Ganancias */}
+                                                    <div className="grid grid-cols-2 gap-2 bg-gradient-to-r from-purple-50 to-pink-50 p-2.5 rounded-2xl border border-purple-100/50 text-[11px]">
+                                                        <div>
+                                                            <span className="text-slate-500 block text-[9px] font-bold uppercase">Precio de Venta:</span>
+                                                            <strong className="text-slate-800">${precioVentaUSD.toFixed(2)} USD</strong> 
+                                                            <span className="text-[10px] text-slate-400 block">Bs. {precioVentaBS.toFixed(2)}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-emerald-600 block text-[9px] font-bold uppercase">Ganancia Neta / u:</span>
+                                                            <strong className="text-emerald-700">+${gananciaUSD.toFixed(2)} USD</strong>
+                                                            <span className="text-[10px] text-emerald-600/80 block">+Bs. {gananciaBS.toFixed(2)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'negocio' && (
+                            <div className="space-y-4">
+                                <div className="bg-gradient-to-br from-kreatiaPurple to-indigo-900 text-white p-5 rounded-3xl shadow-xl space-y-4">
+                                    <h2 className="text-xs font-extrabold uppercase tracking-wider text-purple-200">📊 Salud Financiera del Negocio</h2>
+                                    
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div className="bg-white/10 p-3 rounded-2xl">
+                                            <span className="text-purple-200 block text-[10px]">Ingresos Totales</span>
+                                            <span className="text-base font-black text-emerald-400">${totalIngresosUSD.toFixed(2)}</span>
+                                        </div>
+                                        <div className="bg-white/10 p-3 rounded-2xl">
+                                            <span className="text-purple-200 block text-[10px]">Gastos Totales</span>
+                                            <span className="text-base font-black text-rose-400">${totalGastosUSD.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white/20 p-3.5 rounded-2xl border border-white/20">
+                                        <span className="text-xs text-purple-100 block">Balance Neto Actual</span>
+                                        <span className="text-xl font-black text-pink-300">${balanceNetoUSD.toFixed(2)} USD</span>
+                                    </div>
+                                </div>
+
+                                <div className="bg-pink-50 p-4 rounded-3xl border border-pink-100 space-y-3">
+                                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-kreatiaPink">💡 Distribución Recomendada</h3>
+                                    <div className="space-y-2 text-xs">
+                                        <div className="flex justify-between bg-white p-3 rounded-2xl shadow-sm">
+                                            <span className="text-slate-600 font-medium">👩‍💻 Tu Sueldo / Ganancia (30%):</span>
+                                            <span className="font-bold text-kreatiaPurple">${sueldoRecomendado.toFixed(2)} USD</span>
+                                        </div>
+                                        <div className="flex justify-between bg-white p-3 rounded-2xl shadow-sm">
+                                            <span className="text-slate-600 font-medium">💰 Fondo de Ahorro / Reinversión (20%):</span>
+                                            <span className="font-bold text-emerald-600">${ahorroRecomendado.toFixed(2)} USD</span>
+                                        </div>
+                                        <div className="flex justify-between bg-white p-3 rounded-2xl shadow-sm">
+                                            <span className="text-slate-600 font-medium">🛠️ Operación y Insumos (50%):</span>
+                                            <span className="font-bold text-slate-700">${(balanceNetoUSD * 0.50 > 0 ? balanceNetoUSD * 0.50 : 0).toFixed(2)} USD</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'calculadora' && (
+                            <div className="space-y-4">
+                                <div className="bg-pink-50 p-4 rounded-3xl border border-pink-100 space-y-3">
+                                    <h2 className="text-xs font-extrabold uppercase tracking-wider text-kreatiaPink">💡 Calculadora de Precios</h2>
                                     <div>
                                         <label className="text-[11px] font-bold text-slate-500 block mb-1">Costo total de insumos (USD):</label>
-                                        <input type="number" step="0.01" placeholder="Ej. 5.50" value={calcInsumo} onChange={(e)=>setCalcInsumo(e.target.value)} className="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                        <input type="number" step="0.01" placeholder="Ej. 5.50" value={calcInsumo} onChange={(e)=>setCalcInsumo(e.target.value)} className="w-full p-2.5 text-xs rounded-2xl border border-slate-200 outline-none bg-white" />
                                     </div>
                                     <div>
                                         <label className="text-[11px] font-bold text-slate-500 block mb-1">Piezas que salen del material:</label>
-                                        <input type="number" value={calcCantidad} onChange={(e)=>setCalcCantidad(Math.max(1, parseInt(e.target.value)||1))} className="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                        <input type="number" value={calcCantidad} onChange={(e)=>setCalcCantidad(Math.max(1, parseInt(e.target.value)||1))} className="w-full p-2.5 text-xs rounded-2xl border border-slate-200 outline-none bg-white" />
                                     </div>
                                     <div>
                                         <label className="text-[11px] font-bold text-slate-500 block mb-1">Margen de ganancia (%):</label>
-                                        <input type="number" value={calcMargen} onChange={(e)=>setCalcMargen(parseFloat(e.target.value)||0)} className="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                        <input type="number" value={calcMargen} onChange={(e)=>setCalcMargen(parseFloat(e.target.value)||0)} className="w-full p-2.5 text-xs rounded-2xl border border-slate-200 outline-none bg-white" />
                                     </div>
                                 </div>
 
                                 {calcInsumo && (
-                                    <div className="bg-gradient-to-br from-kreatiaPurple to-indigo-900 text-white p-4 rounded-2xl shadow-lg space-y-2.5">
-                                        <h3 className="text-xs font-bold uppercase tracking-wider text-purple-200">✨ Precio sugerido por Unidad</h3>
+                                    <div className="bg-gradient-to-br from-kreatiaPurple to-indigo-900 text-white p-4 rounded-3xl shadow-lg space-y-2.5">
+                                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-purple-200">✨ Precio sugerido por Unidad</h3>
                                         {(() => {
                                             const costoUnitario = (parseFloat(calcInsumo) || 0) / calcCantidad;
                                             const precioUSD = costoUnitario * (1 + calcMargen / 100);
@@ -392,15 +754,15 @@
 
                                             return (
                                                 <div className="space-y-2 text-xs">
-                                                    <div className="flex justify-between bg-white/10 p-2 rounded-xl">
+                                                    <div className="flex justify-between bg-white/10 p-2.5 rounded-2xl">
                                                         <span className="text-purple-200">Costo unitario real:</span>
                                                         <span className="font-bold">${costoUnitario.toFixed(2)} USD</span>
                                                     </div>
-                                                    <div className="flex justify-between bg-white/20 p-2.5 rounded-xl border border-white/20">
+                                                    <div className="flex justify-between bg-white/20 p-3 rounded-2xl border border-white/20">
                                                         <span className="font-bold">Precio de Venta (USD):</span>
-                                                        <span className="text-sm font-extrabold text-pink-300">${precioUSD.toFixed(2)}</span>
+                                                        <span className="text-sm font-black text-pink-300">${precioUSD.toFixed(2)}</span>
                                                     </div>
-                                                    <div className="flex justify-between bg-white/10 p-2 rounded-xl">
+                                                    <div className="flex justify-between bg-white/10 p-2.5 rounded-2xl">
                                                         <span className="text-purple-200">En Bolívares (Tasa Intermedia):</span>
                                                         <span className="font-bold">Bs. {precioBS.toFixed(2)}</span>
                                                     </div>
@@ -410,26 +772,27 @@
                                     </div>
                                 )}
                             </div>
-                        ) : (
-                            /* Conversor Rápido de Moneda */
+                        )}
+
+                        {activeTab === 'conversor' && (
                             <div className="space-y-4">
-                                <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 space-y-3">
-                                    <h2 className="text-xs font-bold uppercase tracking-wider text-kreatiaPurple">💱 Conversor Rápido</h2>
+                                <div className="bg-indigo-50 p-4 rounded-3xl border border-indigo-100 space-y-3">
+                                    <h2 className="text-xs font-extrabold uppercase tracking-wider text-kreatiaPurple">💱 Conversor Rápido</h2>
                                     <div>
                                         <label className="text-[11px] font-bold text-slate-500 block mb-1">Monto a convertir:</label>
-                                        <input type="number" step="0.01" placeholder="Ej. 100" value={montoConversor} onChange={(e)=>setMontoConversor(e.target.value)} className="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                        <input type="number" step="0.01" placeholder="Ej. 100" value={montoConversor} onChange={(e)=>setMontoConversor(e.target.value)} className="w-full p-2.5 text-xs rounded-2xl border border-slate-200 outline-none bg-white" />
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <label className="text-[10px] font-bold text-slate-500 block mb-1">Moneda de origen:</label>
-                                            <select value={tipoMonedaConversor} onChange={(e)=>setTipoMonedaConversor(e.target.value)} className="w-full p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                            <label className="text-[10px] font-bold text-slate-500 block mb-1">Moneda origen:</label>
+                                            <select value={tipoMonedaConversor} onChange={(e)=>setTipoMonedaConversor(e.target.value)} className="w-full p-2 text-xs rounded-2xl border border-slate-200 bg-white font-medium">
                                                 <option value="USD">USD ($)</option>
                                                 <option value="BS">Bolívares (Bs)</option>
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-bold text-slate-500 block mb-1">Tasa de referencia:</label>
-                                            <select value={tipoTasaUsada} onChange={(e)=>setTipoTasaUsada(e.target.value)} className="w-full p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                            <label className="text-[10px] font-bold text-slate-500 block mb-1">Tasa referencia:</label>
+                                            <select value={tipoTasaUsada} onChange={(e)=>setTipoTasaUsada(e.target.value)} className="w-full p-2 text-xs rounded-2xl border border-slate-200 bg-white font-medium">
                                                 <option value="intermedia">Intermedia (Bs. {tasaIntermedia})</option>
                                                 <option value="dolar">BCV Dólar (Bs. {tasaDolarBCV})</option>
                                                 <option value="euro">BCV Euro (Bs. {tasaEuroBCV})</option>
@@ -439,32 +802,22 @@
                                 </div>
 
                                 {montoConversor && (
-                                    <div className="bg-gradient-to-br from-kreatiaPink to-kreatiaPurple text-white p-4 rounded-2xl shadow-lg space-y-2.5">
-                                        <h3 className="text-xs font-bold uppercase tracking-wider text-pink-200">✨ Resultado de Conversión</h3>
+                                    <div className="bg-gradient-to-br from-kreatiaPink to-kreatiaPurple text-white p-4 rounded-3xl shadow-lg space-y-2.5 text-center">
+                                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-pink-200">✨ Resultado</h3>
                                         {(() => {
                                             const valor = parseFloat(montoConversor) || 0;
                                             let tasaSeleccionada = tasaIntermedia;
                                             if (tipoTasaUsada === 'dolar') tasaSeleccionada = tasaDolarBCV;
                                             if (tipoTasaUsada === 'euro') tasaSeleccionada = tasaEuroBCV;
 
-                                            let resultado = 0;
-                                            let unidadDestino = '';
-
-                                            if (tipoMonedaConversor === 'USD') {
-                                                resultado = valor * tasaSeleccionada;
-                                                unidadDestino = 'Bolívares (Bs)';
-                                            } else {
-                                                resultado = tasaSeleccionada > 0 ? valor / tasaSeleccionada : 0;
-                                                unidadDestino = 'Dólares ($)';
-                                            }
+                                            const resultado = tipoMonedaConversor === 'USD' ? valor * tasaSeleccionada : (tasaSeleccionada > 0 ? valor / tasaSeleccionada : 0);
 
                                             return (
-                                                <div className="text-center py-2 space-y-1">
-                                                    <span className="text-xs text-pink-100 block">Equivalente a:</span>
+                                                <div className="py-2">
                                                     <span className="text-2xl font-black block">
                                                         {tipoMonedaConversor === 'USD' ? `Bs. ${resultado.toFixed(2)}` : `$${resultado.toFixed(2)}`}
                                                     </span>
-                                                    <span className="text-[10px] text-pink-200 block">Usando tasa {tipoTasaUsada} ({tasaSeleccionada})</span>
+                                                    <span className="text-[10px] text-pink-200">Usando tasa {tipoTasaUsada} ({tasaSeleccionada})</span>
                                                 </div>
                                             );
                                         })()}
@@ -474,9 +827,8 @@
                         )}
                     </main>
 
-                    {/* Footer */}
-                    <footer className="p-3 text-center text-[10px] text-slate-400 border-t border-slate-100 bg-slate-50">
-                        KreatiaPay & Finanzas - Multi-usuario con Supabase
+                    <footer className="p-3 text-center text-[10px] text-slate-400 border-t border-slate-100 bg-slate-50 sm:rounded-b-3xl">
+                        KreatiaPay & Finanzas - Smart Inventory 🚀
                     </footer>
                 </div>
             );
