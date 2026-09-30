@@ -84,6 +84,8 @@
             const [authEmail, setAuthEmail] = useState('');
             const [authPassword, setAuthPassword] = useState('');
             const [isRegistering, setIsRegistering] = useState(false);
+            const [isRecovering, setIsRecovering] = useState(false);
+            const [paisRegistro, setPaisRegistro] = useState('VE'); // 'VE' o 'OTRO'
             const [authError, setAuthError] = useState('');
             const [authSuccessMsg, setAuthSuccessMsg] = useState('');
 
@@ -91,27 +93,26 @@
             const [deferredPrompt, setDeferredPrompt] = useState(null);
             const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-            // Estados de Tasas de Cambio
+            // Estados de Tasas de Cambio y BCV automático
             const [tasaDolarBCV, setTasaDolarBCV] = useState(36.5);
             const [tasaEuroBCV, setTasaEuroBCV] = useState(39.8);
+            const [cargandoTasaBCV, setCargandoTasaBCV] = useState(false);
             const tasaIntermedia = Number(((tasaDolarBCV + tasaEuroBCV) / 2).toFixed(2));
 
-            // Pestañas ('finanzas', 'inventario', 'calculadora', 'negocio', 'conversor')
+            // Pestañas
             const [activeTab, setActiveTab] = useState('finanzas');
 
             // Datos Financieros y Estado
             const [movimientos, setMovimientos] = useState([]);
             const [deudas, setDeudas] = useState([]);
             const [inventario, setInventario] = useState([]);
-            
-            // Buscador Inteligente de Inventario
             const [busquedaInventario, setBusquedaInventario] = useState('');
 
-            // Papeleras con opción de deshacer
+            // Papeleras
             const [papeleraMov, setPapeleraMov] = useState(null);
             const [papeleraInv, setPapeleraInv] = useState(null);
 
-            // Filtros de Historial por Fechas
+            // Filtros de Historial
             const [filtroFechaInicio, setFiltroFechaInicio] = useState('');
             const [filtroFechaFin, setFiltroFechaFin] = useState('');
 
@@ -124,20 +125,19 @@
             const [nuevaMoneda, setNuevaMoneda] = useState('USD');
             const [nuevoTipo, setNuevoTipo] = useState('ingreso');
 
-            // Formulario de Inventario (Crear / Editar)
+            // Inventario Form
             const [editandoInvId, setEditandoInvId] = useState(null);
             const [invNombre, setInvNombre] = useState('');
             const [invStock, setInvStock] = useState('');
             const [invCosto, setInvCosto] = useState('');
-            const [invMargen, setInvMargen] = useState(30); // Margen individual por producto
+            const [invMargen, setInvMargen] = useState(30);
             const [invImagen, setInvImagen] = useState('');
 
-            // Calculadora de precios general
+            // Calculadora & Conversor
             const [calcInsumo, setCalcInsumo] = useState('');
             const [calcCantidad, setCalcCantidad] = useState(1);
             const [calcMargen, setCalcMargen] = useState(30);
 
-            // Conversor Rápido
             const [montoConversor, setMontoConversor] = useState('');
             const [tipoMonedaConversor, setTipoMonedaConversor] = useState('USD');
             const [tipoTasaUsada, setTipoTasaUsada] = useState('intermedia');
@@ -160,6 +160,9 @@
                 };
                 window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
+                // Obtener tasas BCV automáticas del día desde API pública oficial
+                fetchTasasBCVOficiales();
+
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
                     setSession(session);
                     setLoadingAuth(false);
@@ -178,6 +181,25 @@
                     window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
                 };
             }, []);
+
+            // Función para consultar la API del BCV en tiempo real
+            const fetchTasasBCVOficiales = async () => {
+                try {
+                    setCargandoTasaBCV(true);
+                    const response = await fetch('https://rates.dolarvzla.com/bcv/current.json');
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data && data.usd && data.eur) {
+                            setTasaDolarBCV(Number(data.usd));
+                            setTasaEuroBCV(Number(data.eur));
+                        }
+                    }
+                } catch (err) {
+                    // Si falla la red, mantiene los valores por defecto o guardados
+                } finally {
+                    setCargandoTasaBCV(false);
+                }
+            };
 
             const handleInstallClick = async () => {
                 if (!deferredPrompt) return;
@@ -202,13 +224,25 @@
                 setAuthError('');
                 setAuthSuccessMsg('');
                 try {
-                    if (isRegistering) {
-                        const { data, error } = await supabaseClient.auth.signUp({ email: authEmail, password: authPassword });
+                    if (isRecovering) {
+                        const { error } = await supabaseClient.auth.resetPasswordForEmail(authEmail, {
+                            redirectTo: window.location.href,
+                        });
                         if (error) throw error;
+                        setAuthSuccessMsg('¡Correo de recuperación enviado! Revisa tu bandeja de entrada.');
+                        setIsRecovering(false);
+                    } else if (isRegistering) {
+                        const { data, error } = await supabaseClient.auth.signUp({ 
+                            email: authEmail, 
+                            password: authPassword,
+                            options: { data: { pais: paisRegistro } }
+                        });
+                        if (error) throw error;
+                        
                         if (data?.session) {
                             setSession(data.session);
                         } else {
-                            setAuthSuccessMsg('¡Registro exitoso! Inicia sesión con tus datos.');
+                            setAuthSuccessMsg('¡Registro exitoso! Por favor verifica tu correo o inicia sesión directamente.');
                             setIsRegistering(false);
                         }
                     } else {
@@ -303,8 +337,8 @@
                     user_id: session.user.id,
                     nombre: invNombre,
                     stock: parseInt(invStock),
-                    precio: parseFloat(invCosto), // Guardamos el costo unitario base
-                    margen: parseFloat(invMargen) || 30, // Margen individual
+                    precio: parseFloat(invCosto),
+                    margen: parseFloat(invMargen) || 30,
                     imagen: invImagen || 'https://img.icons8.com/color/96/box.png'
                 };
 
@@ -361,12 +395,10 @@
                 }
             };
 
-            // Inventario Filtrado por Buscador Inteligente
             const inventarioFiltrado = inventario.filter(prod => 
                 prod.nombre.toLowerCase().includes(busquedaInventario.toLowerCase())
             );
 
-            // Exportar Excel / CSV
             const exportarExcelCSV = () => {
                 if (movimientos.length === 0) {
                     alert('No hay movimientos para exportar.');
@@ -407,33 +439,52 @@
                 );
             }
 
+            // PANTALLA DE AUTENTICACIÓN (LOGIN / REGISTRO / RECUPERACIÓN)
             if (!session) {
                 return (
                     <div className="flex-1 flex flex-col justify-center p-6 bg-white">
                         <div className="text-center mb-6">
                             <span className="text-4xl">💎</span>
                             <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-kreatiaPink to-kreatiaPurple mt-2">KreatiaPay ✨</h1>
-                            <p className="text-xs text-slate-500 mt-1">Plataforma financiera y de inventario para emprendedores</p>
+                            <p className="text-xs text-slate-500 mt-1">Plataforma financiera y multi-país para emprendedores</p>
                         </div>
 
                         <form onSubmit={handleAuth} className="space-y-4">
                             {authError && <div className="bg-rose-50 text-rose-600 p-3 rounded-2xl text-xs font-medium">{authError}</div>}
                             {authSuccessMsg && <div className="bg-emerald-50 text-emerald-700 p-3 rounded-2xl text-xs font-medium">{authSuccessMsg}</div>}
+                            
                             <div>
                                 <label className="text-xs font-bold text-slate-600 block mb-1">Correo electrónico</label>
                                 <input type="email" required value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="tucorreo@emprendimiento.com" className="w-full p-3.5 text-xs rounded-2xl border border-slate-200 outline-none focus:border-kreatiaPink bg-slate-50/50" />
                             </div>
-                            <div>
-                                <label className="text-xs font-bold text-slate-600 block mb-1">Contraseña</label>
-                                <input type="password" required value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="••••••••" className="w-full p-3.5 text-xs rounded-2xl border border-slate-200 outline-none focus:border-kreatiaPink bg-slate-50/50" />
-                            </div>
+
+                            {!isRecovering && (
+                                <div>
+                                    <label className="text-xs font-bold text-slate-600 block mb-1">Contraseña</label>
+                                    <input type="password" required value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="••••••••" className="w-full p-3.5 text-xs rounded-2xl border border-slate-200 outline-none focus:border-kreatiaPink bg-slate-50/50" />
+                                </div>
+                            )}
+
+                            {isRegistering && (
+                                <div>
+                                    <label className="text-xs font-bold text-slate-600 block mb-1">País de operación</label>
+                                    <select value={paisRegistro} onChange={(e)=>setPaisRegistro(e.target.value)} className="w-full p-3 text-xs rounded-2xl border border-slate-200 bg-slate-50 outline-none font-medium">
+                                        <option value="VE">🇻🇪 Venezuela (Motor BCV + 3 Monedas)</option>
+                                        <option value="OTRO">🌍 Otro País (Moneda Local Directa)</option>
+                                    </select>
+                                </div>
+                            )}
+
                             <button type="submit" className="w-full bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white py-3.5 rounded-2xl text-xs font-bold shadow-lg hover:opacity-90 transition">
-                                {isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
+                                {isRecovering ? 'Enviar Enlace de Recuperación' : (isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión')}
                             </button>
                         </form>
 
-                        <div className="text-center mt-6">
-                            <button onClick={()=>{setIsRegistering(!isRegistering); setAuthError(''); setAuthSuccessMsg('');}} className="text-xs text-kreatiaPurple font-semibold hover:underline">
+                        <div className="flex flex-col gap-2 text-center mt-5 text-xs">
+                            <button onClick={()=>{setIsRecovering(!isRecovering); setIsRegistering(false); setAuthError(''); setAuthSuccessMsg('');}} className="text-slate-500 hover:underline font-semibold">
+                                {isRecovering ? '← Volver al inicio de sesión' : '¿Olvidaste tu contraseña?'}
+                            </button>
+                            <button onClick={()=>{setIsRegistering(!isRegistering); setIsRecovering(false); setAuthError(''); setAuthSuccessMsg('');}} className="text-kreatiaPurple font-semibold hover:underline">
                                 {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate aquí'}
                             </button>
                         </div>
@@ -462,9 +513,10 @@
                             <button onClick={logout} className="text-[10px] bg-white/20 px-2.5 py-1 rounded-full font-medium hover:bg-white/30 transition">Salir</button>
                         </div>
                         
+                        {/* Tasas automáticas BCV */}
                         <div className="grid grid-cols-3 gap-2 mt-2 bg-white/10 p-2 rounded-2xl backdrop-blur-sm text-center border border-white/10">
                             <div>
-                                <span className="text-[10px] block text-pink-200">BCV Dólar</span>
+                                <span className="text-[10px] block text-pink-200">BCV Dólar {cargandoTasaBCV && '⏳'}</span>
                                 <input type="number" step="0.1" value={tasaDolarBCV} onChange={(e)=>setTasaDolarBCV(parseFloat(e.target.value)||0)} className="bg-transparent text-center font-bold text-xs w-full outline-none border-b border-white/30" />
                             </div>
                             <div>
@@ -595,7 +647,6 @@
                                     </div>
                                 )}
 
-                                {/* Formulario Crear / Editar Inventario */}
                                 <form onSubmit={guardarProductoInventario} className="bg-pink-50/70 p-4 rounded-3xl border border-pink-100 space-y-3">
                                     <h2 className="text-xs font-extrabold uppercase tracking-wider text-kreatiaPink">
                                         {editandoInvId ? '✏️ Editar Producto' : '📦 Registrar Producto en Stock'}
@@ -619,12 +670,11 @@
                                     </div>
                                 </form>
 
-                                {/* 🔍 BUSCADOR INTELIGENTE */}
                                 <div className="space-y-3">
                                     <div className="relative">
                                         <input 
                                             type="text" 
-                                            placeholder="🔍 Buscar producto en inventario (ej. tazas, libretas)..." 
+                                            placeholder="🔍 Buscar producto en inventario..." 
                                             value={busquedaInventario} 
                                             onChange={(e)=>setBusquedaInventario(e.target.value)} 
                                             className="w-full p-3 pl-9 text-xs rounded-2xl border border-slate-200 bg-slate-50 outline-none focus:border-kreatiaPink font-medium shadow-sm" 
@@ -663,7 +713,6 @@
                                                         </div>
                                                     </div>
 
-                                                    {/* Panel Inteligente de Precios y Ganancias */}
                                                     <div className="grid grid-cols-2 gap-2 bg-gradient-to-r from-purple-50 to-pink-50 p-2.5 rounded-2xl border border-purple-100/50 text-[11px]">
                                                         <div>
                                                             <span className="text-slate-500 block text-[9px] font-bold uppercase">Precio de Venta:</span>
@@ -828,7 +877,7 @@
                     </main>
 
                     <footer className="p-3 text-center text-[10px] text-slate-400 border-t border-slate-100 bg-slate-50 sm:rounded-b-3xl">
-                        KreatiaPay & Finanzas - Smart Inventory 🚀
+                        KreatiaPay & Finanzas - Multi-País & BCV Auto 🚀
                     </footer>
                 </div>
             );
