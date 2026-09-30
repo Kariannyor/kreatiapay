@@ -72,6 +72,11 @@
             const [calcCantidad, setCalcCantidad] = useState(1);
             const [calcMargen, setCalcMargen] = useState(30);
 
+            // Conversor Rápido
+            const [montoConversor, setMontoConversor] = useState('');
+            const [tipoMonedaConversor, setTipoMonedaConversor] = useState('USD');
+            const [tipoTasaUsada, setTipoTasaUsada] = useState('intermedia'); // 'dolar', 'euro', 'intermedia'
+
             // Formulario de Transacción
             const [nuevoDesc, setNuevoDesc] = useState('');
             const [nuevoMonto, setNuevoMonto] = useState('');
@@ -93,8 +98,13 @@
                 return () => subscription.unsubscribe();
             }, []);
 
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+
             const cargarDatos = async (userId) => {
-                // Cargar Movimientos
                 const { data: movData, error: movError } = await supabaseClient
                     .from('movimientos')
                     .select('*')
@@ -103,7 +113,6 @@
                 
                 if (!movError && movData) setMovimientos(movData);
 
-                // Cargar Deudas
                 const { data: deuData, error: deuError } = await supabaseClient
                     .from('deudas')
                     .select('*')
@@ -170,7 +179,7 @@
 
             const deshacerBorrado = async () => {
                 if (papelera && session) {
-                    const { id, ...rest } = papelera; // Quitamos el ID viejo para insertar limpio
+                    const { id, ...rest } = papelera;
                     const { data, error } = await supabaseClient.from('movimientos').insert([{ ...rest, user_id: session.user.id }]).select();
                     if (!error && data) {
                         setMovimientos([data[0], ...movimientos]);
@@ -206,35 +215,35 @@
             };
 
             if (loadingAuth) {
-                return <div class="flex-1 flex justify-center items-center p-10 text-kreatiaPink font-bold">Cargando KreatiaPay... ✨</div>;
+                return <div className="flex-1 flex justify-center items-center p-10 text-kreatiaPink font-bold">Cargando KreatiaPay... ✨</div>;
             }
 
             // PANTALLA DE AUTENTICACIÓN
             if (!session) {
                 return (
-                    <div class="flex-1 flex flex-col justify-center p-6 bg-white">
-                        <div class="text-center mb-6">
-                            <h1 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-kreatiaPink to-kreatiaPurple">KreatiaPay ✨</h1>
-                            <p class="text-xs text-slate-500 mt-1">Tu plataforma financiera inteligente para Venezuela</p>
+                    <div className="flex-1 flex flex-col justify-center p-6 bg-white">
+                        <div className="text-center mb-6">
+                            <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-kreatiaPink to-kreatiaPurple">KreatiaPay ✨</h1>
+                            <p className="text-xs text-slate-500 mt-1">Tu plataforma financiera inteligente para Venezuela</p>
                         </div>
 
-                        <form onSubmit={handleAuth} class="space-y-4">
-                            {authError && <div class="bg-rose-50 text-rose-600 p-3 rounded-xl text-xs">{authError}</div>}
+                        <form onSubmit={handleAuth} className="space-y-4">
+                            {authError && <div className="bg-rose-50 text-rose-600 p-3 rounded-xl text-xs">{authError}</div>}
                             <div>
-                                <label class="text-xs font-bold text-slate-600 block mb-1">Correo electrónico</label>
-                                <input type="email" required value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="tucorreo@emprendimiento.com" class="w-full p-3 text-xs rounded-xl border border-slate-200 outline-none focus:border-kreatiaPink" />
+                                <label className="text-xs font-bold text-slate-600 block mb-1">Correo electrónico</label>
+                                <input type="email" required value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="tucorreo@emprendimiento.com" className="w-full p-3 text-xs rounded-xl border border-slate-200 outline-none focus:border-kreatiaPink" />
                             </div>
                             <div>
-                                <label class="text-xs font-bold text-slate-600 block mb-1">Contraseña</label>
-                                <input type="password" required value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="••••••••" class="w-full p-3 text-xs rounded-xl border border-slate-200 outline-none focus:border-kreatiaPink" />
+                                <label className="text-xs font-bold text-slate-600 block mb-1">Contraseña</label>
+                                <input type="password" required value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="••••••••" className="w-full p-3 text-xs rounded-xl border border-slate-200 outline-none focus:border-kreatiaPink" />
                             </div>
-                            <button type="submit" class="w-full bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white py-3 rounded-xl text-xs font-bold shadow-md hover:opacity-90 transition">
+                            <button type="submit" className="w-full bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white py-3 rounded-xl text-xs font-bold shadow-md hover:opacity-90 transition">
                                 {isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
                             </button>
                         </form>
 
-                        <div class="text-center mt-4">
-                            <button onClick={()=>setIsRegistering(!isRegistering)} class="text-xs text-kreatiaPurple font-semibold hover:underline">
+                        <div className="text-center mt-4">
+                            <button onClick={()=>setIsRegistering(!isRegistering)} className="text-xs text-kreatiaPurple font-semibold hover:underline">
                                 {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate aquí'}
                             </button>
                         </div>
@@ -244,154 +253,218 @@
 
             // APLICACIÓN PRINCIPAL
             return (
-                <div class="flex flex-col justify-between h-full">
+                <div className="flex flex-col justify-between h-full">
                     {/* Encabezado */}
-                    <header class="bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white p-5 sm:rounded-t-3xl shadow-lg">
-                        <div class="flex justify-between items-center mb-2">
-                            <h1 class="text-xl font-bold tracking-wide">KreatiaPay ✨</h1>
-                            <button onClick={logout} class="text-[10px] bg-white/20 px-2.5 py-1 rounded-full font-medium hover:bg-white/30 transition">Cerrar Sesión</button>
+                    <header className="bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white p-5 sm:rounded-t-3xl shadow-lg">
+                        <div className="flex justify-between items-center mb-2">
+                            <h1 className="text-xl font-bold tracking-wide">KreatiaPay ✨</h1>
+                            <button onClick={logout} className="text-[10px] bg-white/20 px-2.5 py-1 rounded-full font-medium hover:bg-white/30 transition">Cerrar Sesión</button>
                         </div>
-                        <p class="text-[11px] text-pink-100">Control inteligente de tasas y deudas al instante.</p>
+                        <p className="text-[11px] text-pink-100">Control inteligente de tasas y deudas al instante.</p>
                         
                         {/* Selector de Tasas + Tasa Intermedia Automática */}
-                        <div class="grid grid-cols-3 gap-2 mt-3 bg-white/10 p-2.5 rounded-xl backdrop-blur-sm text-center">
+                        <div className="grid grid-cols-3 gap-2 mt-3 bg-white/10 p-2.5 rounded-xl backdrop-blur-sm text-center">
                             <div>
-                                <span class="text-[10px] block text-pink-200">BCV Dólar</span>
-                                <input type="number" step="0.1" value={tasaDolarBCV} onChange={(e)=>setTasaDolarBCV(parseFloat(e.target.value)||0)} class="bg-transparent text-center font-bold text-xs w-full outline-none border-b border-white/30" />
+                                <span className="text-[10px] block text-pink-200">BCV Dólar</span>
+                                <input type="number" step="0.1" value={tasaDolarBCV} onChange={(e)=>setTasaDolarBCV(parseFloat(e.target.value)||0)} className="bg-transparent text-center font-bold text-xs w-full outline-none border-b border-white/30" />
                             </div>
                             <div>
-                                <span class="text-[10px] block text-pink-200">BCV Euro</span>
-                                <input type="number" step="0.1" value={tasaEuroBCV} onChange={(e)=>setTasaEuroBCV(parseFloat(e.target.value)||0)} class="bg-transparent text-center font-bold text-xs w-full outline-none border-b border-white/30" />
+                                <span className="text-[10px] block text-pink-200">BCV Euro</span>
+                                <input type="number" step="0.1" value={tasaEuroBCV} onChange={(e)=>setTasaEuroBCV(parseFloat(e.target.value)||0)} className="bg-transparent text-center font-bold text-xs w-full outline-none border-b border-white/30" />
                             </div>
                             <div>
-                                <span class="text-[10px] block text-pink-200">Intermedia (Auto)</span>
-                                <span class="text-sm font-black text-pink-300 block pt-1">Bs. {tasaIntermedia}</span>
+                                <span className="text-[10px] block text-pink-200">Intermedia (Auto)</span>
+                                <span className="text-sm font-black text-pink-300 block pt-1">Bs. {tasaIntermedia}</span>
                             </div>
                         </div>
                     </header>
 
                     {/* Pestañas */}
-                    <div class="flex border-b border-slate-100">
-                        <button onClick={()=>setActiveTab('finanzas')} class={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='finanzas' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
+                    <div className="flex border-b border-slate-100">
+                        <button onClick={()=>setActiveTab('finanzas')} className={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='finanzas' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
                             💰 Finanzas & Deudas
                         </button>
-                        <button onClick={()=>setActiveTab('calculadora')} class={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='calculadora' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
+                        <button onClick={()=>setActiveTab('calculadora')} className={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='calculadora' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
                             📐 Calculadora Precios
+                        </button>
+                        <button onClick={()=>setActiveTab('conversor')} className={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='conversor' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
+                            💱 Conversor
                         </button>
                     </div>
 
                     {/* Contenido */}
-                    <main class="p-4 flex-1 overflow-y-auto space-y-4">
+                    <main className="p-4 flex-1 overflow-y-auto space-y-4">
                         {activeTab === 'finanzas' ? (
-                            <div class="space-y-4">
+                            <div className="space-y-4">
                                 {papelera && (
-                                    <div class="bg-amber-50 border border-amber-200 p-3 rounded-xl flex justify-between items-center text-xs text-amber-800">
+                                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex justify-between items-center text-xs text-amber-800">
                                         <span>Movimiento eliminado.</span>
-                                        <button onClick={deshacerBorrado} class="bg-amber-600 text-white px-3 py-1 rounded-lg font-bold">Deshacer</button>
+                                        <button onClick={deshacerBorrado} className="bg-amber-600 text-white px-3 py-1 rounded-lg font-bold">Deshacer</button>
                                     </div>
                                 )}
 
                                 {/* Deudas */}
-                                <div class="bg-purple-50 p-3.5 rounded-2xl border border-purple-100 space-y-2">
-                                    <h2 class="text-xs font-bold uppercase tracking-wider text-kreatiaPurple mb-1">📌 Deudas Pendientes</h2>
+                                <div className="bg-purple-50 p-3.5 rounded-2xl border border-purple-100 space-y-2">
+                                    <h2 className="text-xs font-bold uppercase tracking-wider text-kreatiaPurple mb-1">📌 Deudas Pendientes</h2>
                                     {deudas.map(d => (
-                                        <div key={d.id} class="flex justify-between items-center bg-white p-2.5 rounded-xl shadow-sm text-xs">
-                                            <span class="text-slate-600 font-medium">{d.desc}</span>
-                                            <div class="flex items-center gap-2">
-                                                <span class="font-bold text-rose-600">${d.monto.toFixed(2)} USD</span>
-                                                <button onClick={()=>eliminarDeuda(d.id)} class="text-slate-300 hover:text-rose-500 font-bold">✕</button>
+                                        <div key={d.id} className="flex justify-between items-center bg-white p-2.5 rounded-xl shadow-sm text-xs">
+                                            <span className="text-slate-600 font-medium">{d.desc}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-rose-600">${d.monto.toFixed(2)} USD</span>
+                                                <button onClick={()=>eliminarDeuda(d.id)} className="text-slate-300 hover:text-rose-500 font-bold">✕</button>
                                             </div>
                                         </div>
                                     ))}
-                                    <form onSubmit={agregarDeuda} class="flex gap-2 pt-1">
-                                        <input type="text" placeholder="Nueva deuda (ej. Proveedor)" value={nuevoDeudaDesc} onChange={(e)=>setNuevoDeudaDesc(e.target.value)} class="flex-1 p-2 text-xs rounded-xl border border-purple-200 bg-white outline-none" />
-                                        <input type="number" step="0.01" placeholder="Monto $" value={nuevoDeudaMonto} onChange={(e)=>setNuevoDeudaMonto(e.target.value)} class="w-20 p-2 text-xs rounded-xl border border-purple-200 bg-white outline-none" />
-                                        <button type="submit" class="bg-kreatiaPurple text-white px-3 py-2 rounded-xl text-xs font-bold">+</button>
+                                    <form onSubmit={agregarDeuda} className="flex gap-2 pt-1">
+                                        <input type="text" placeholder="Nueva deuda (ej. Proveedor)" value={nuevoDeudaDesc} onChange={(e)=>setNuevoDeudaDesc(e.target.value)} className="flex-1 p-2 text-xs rounded-xl border border-purple-200 bg-white outline-none" />
+                                        <input type="number" step="0.01" placeholder="Monto $" value={nuevoDeudaMonto} onChange={(e)=>setNuevoDeudaMonto(e.target.value)} className="w-20 p-2 text-xs rounded-xl border border-purple-200 bg-white outline-none" />
+                                        <button type="submit" className="bg-kreatiaPurple text-white px-3 py-2 rounded-xl text-xs font-bold">+</button>
                                     </form>
                                 </div>
 
                                 {/* Formulario Transacción */}
-                                <form onSubmit={agregarMovimiento} class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2.5">
-                                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">➕ Registrar Transacción</h2>
-                                    <div class="flex gap-2">
-                                        <select value={nuevoTipo} onChange={(e)=>setNuevoTipo(e.target.value)} class="p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                <form onSubmit={agregarMovimiento} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2.5">
+                                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">➕ Registrar Transacción</h2>
+                                    <div className="flex gap-2">
+                                        <select value={nuevoTipo} onChange={(e)=>setNuevoTipo(e.target.value)} className="p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
                                             <option value="ingreso">Ingreso</option>
                                             <option value="gasto">Gasto</option>
                                         </select>
-                                        <input type="text" placeholder="Descripción (ej. Venta tazas)" value={nuevoDesc} onChange={(e)=>setNuevoDesc(e.target.value)} class="flex-1 p-2 text-xs rounded-xl border border-slate-200 outline-none" />
+                                        <input type="text" placeholder="Descripción (ej. Venta tazas)" value={nuevoDesc} onChange={(e)=>setNuevoDesc(e.target.value)} className="flex-1 p-2 text-xs rounded-xl border border-slate-200 outline-none" />
                                     </div>
-                                    <div class="flex gap-2">
-                                        <input type="number" step="0.01" placeholder="Monto" value={nuevoMonto} onChange={(e)=>setNuevoMonto(e.target.value)} class="flex-1 p-2 text-xs rounded-xl border border-slate-200 outline-none" />
-                                        <select value={nuevaMoneda} onChange={(e)=>setNuevaMoneda(e.target.value)} class="p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                    <div className="flex gap-2">
+                                        <input type="number" step="0.01" placeholder="Monto" value={nuevoMonto} onChange={(e)=>setNuevoMonto(e.target.value)} className="flex-1 p-2 text-xs rounded-xl border border-slate-200 outline-none" />
+                                        <select value={nuevaMoneda} onChange={(e)=>setNuevaMoneda(e.target.value)} className="p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
                                             <option value="USD">USD ($)</option>
                                             <option value="BS">Bolívares (Bs)</option>
                                         </select>
-                                        <button type="submit" class="bg-kreatiaPink text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-pink-700 transition">Guardar</button>
+                                        <button type="submit" className="bg-kreatiaPink text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-pink-700 transition">Guardar</button>
                                     </div>
                                 </form>
 
                                 {/* Historial */}
                                 <div>
-                                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">📜 Historial</h2>
-                                    <div class="space-y-2">
+                                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">📜 Historial</h2>
+                                    <div className="space-y-2">
                                         {movimientos.map(m => (
-                                            <div key={m.id} class="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                            <div key={m.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
                                                 <div>
-                                                    <p class="text-xs font-bold text-slate-700">{m.desc}</p>
-                                                    <span class="text-[10px] text-slate-400">{m.fecha}</span>
+                                                    <p className="text-xs font-bold text-slate-700">{m.desc}</p>
+                                                    <span className="text-[10px] text-slate-400">{m.fecha}</span>
                                                 </div>
-                                                <div class="flex items-center gap-3">
-                                                    <span class={`text-xs font-bold ${m.tipo==='ingreso'?'text-emerald-600':'text-rose-600'}`}>
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`text-xs font-bold ${m.tipo==='ingreso'?'text-emerald-600':'text-rose-600'}`}>
                                                         {m.tipo==='ingreso'?'+':'-'}{m.monto.toFixed(2)} {m.moneda}
                                                     </span>
-                                                    <button onClick={()=>eliminarMovimiento(m.id)} class="text-slate-300 hover:text-rose-500 text-xs font-bold">✕</button>
+                                                    <button onClick={()=>eliminarMovimiento(m.id)} className="text-slate-300 hover:text-rose-500 text-xs font-bold">✕</button>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
-                        ) : (
+                        ) : activeTab === 'calculadora' ? (
                             /* Calculadora de Precios */
-                            <div class="space-y-4">
-                                <div class="bg-pink-50 p-4 rounded-2xl border border-pink-100 space-y-3">
-                                    <h2 class="text-xs font-bold uppercase tracking-wider text-kreatiaPink">💡 Calculadora Inteligente</h2>
+                            <div className="space-y-4">
+                                <div className="bg-pink-50 p-4 rounded-2xl border border-pink-100 space-y-3">
+                                    <h2 className="text-xs font-bold uppercase tracking-wider text-kreatiaPink">💡 Calculadora Inteligente</h2>
                                     <div>
-                                        <label class="text-[11px] font-bold text-slate-500 block mb-1">Costo total de insumos (USD):</label>
-                                        <input type="number" step="0.01" placeholder="Ej. 5.50" value={calcInsumo} onChange={(e)=>setCalcInsumo(e.target.value)} class="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                        <label className="text-[11px] font-bold text-slate-500 block mb-1">Costo total de insumos (USD):</label>
+                                        <input type="number" step="0.01" placeholder="Ej. 5.50" value={calcInsumo} onChange={(e)=>setCalcInsumo(e.target.value)} className="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
                                     </div>
                                     <div>
-                                        <label class="text-[11px] font-bold text-slate-500 block mb-1">Piezas que salen del material:</label>
-                                        <input type="number" value={calcCantidad} onChange={(e)=>setCalcCantidad(Math.max(1, parseInt(e.target.value)||1))} class="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                        <label className="text-[11px] font-bold text-slate-500 block mb-1">Piezas que salen del material:</label>
+                                        <input type="number" value={calcCantidad} onChange={(e)=>setCalcCantidad(Math.max(1, parseInt(e.target.value)||1))} className="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
                                     </div>
                                     <div>
-                                        <label class="text-[11px] font-bold text-slate-500 block mb-1">Margen de ganancia (%):</label>
-                                        <input type="number" value={calcMargen} onChange={(e)=>setCalcMargen(parseFloat(e.target.value)||0)} class="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                        <label className="text-[11px] font-bold text-slate-500 block mb-1">Margen de ganancia (%):</label>
+                                        <input type="number" value={calcMargen} onChange={(e)=>setCalcMargen(parseFloat(e.target.value)||0)} className="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
                                     </div>
                                 </div>
 
                                 {calcInsumo && (
-                                    <div class="bg-gradient-to-br from-kreatiaPurple to-indigo-900 text-white p-4 rounded-2xl shadow-lg space-y-2.5">
-                                        <h3 class="text-xs font-bold uppercase tracking-wider text-purple-200">✨ Precio sugerido por Unidad</h3>
+                                    <div className="bg-gradient-to-br from-kreatiaPurple to-indigo-900 text-white p-4 rounded-2xl shadow-lg space-y-2.5">
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-purple-200">✨ Precio sugerido por Unidad</h3>
                                         {(() => {
                                             const costoUnitario = (parseFloat(calcInsumo) || 0) / calcCantidad;
                                             const precioUSD = costoUnitario * (1 + calcMargen / 100);
                                             const precioBS = precioUSD * tasaIntermedia;
 
                                             return (
-                                                <div class="space-y-2 text-xs">
-                                                    <div class="flex justify-between bg-white/10 p-2 rounded-xl">
-                                                        <span class="text-purple-200">Costo unitario real:</span>
-                                                        <span class="font-bold">${costoUnitario.toFixed(2)} USD</span>
+                                                <div className="space-y-2 text-xs">
+                                                    <div className="flex justify-between bg-white/10 p-2 rounded-xl">
+                                                        <span className="text-purple-200">Costo unitario real:</span>
+                                                        <span className="font-bold">${costoUnitario.toFixed(2)} USD</span>
                                                     </div>
-                                                    <div class="flex justify-between bg-white/20 p-2.5 rounded-xl border border-white/20">
-                                                        <span class="font-bold">Precio de Venta (USD):</span>
-                                                        <span class="text-sm font-extrabold text-pink-300">${precioUSD.toFixed(2)}</span>
+                                                    <div className="flex justify-between bg-white/20 p-2.5 rounded-xl border border-white/20">
+                                                        <span className="font-bold">Precio de Venta (USD):</span>
+                                                        <span className="text-sm font-extrabold text-pink-300">${precioUSD.toFixed(2)}</span>
                                                     </div>
-                                                    <div class="flex justify-between bg-white/10 p-2 rounded-xl">
-                                                        <span class="text-purple-200">En Bolívares (Tasa Intermedia):</span>
-                                                        <span class="font-bold">Bs. {precioBS.toFixed(2)}</span>
+                                                    <div className="flex justify-between bg-white/10 p-2 rounded-xl">
+                                                        <span className="text-purple-200">En Bolívares (Tasa Intermedia):</span>
+                                                        <span className="font-bold">Bs. {precioBS.toFixed(2)}</span>
                                                     </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            /* Conversor Rápido de Moneda */
+                            <div className="space-y-4">
+                                <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 space-y-3">
+                                    <h2 className="text-xs font-bold uppercase tracking-wider text-kreatiaPurple">💱 Conversor Rápido</h2>
+                                    <div>
+                                        <label className="text-[11px] font-bold text-slate-500 block mb-1">Monto a convertir:</label>
+                                        <input type="number" step="0.01" placeholder="Ej. 100" value={montoConversor} onChange={(e)=>setMontoConversor(e.target.value)} className="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-500 block mb-1">Moneda de origen:</label>
+                                            <select value={tipoMonedaConversor} onChange={(e)=>setTipoMonedaConversor(e.target.value)} className="w-full p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                                <option value="USD">USD ($)</option>
+                                                <option value="BS">Bolívares (Bs)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-500 block mb-1">Tasa de referencia:</label>
+                                            <select value={tipoTasaUsada} onChange={(e)=>setTipoTasaUsada(e.target.value)} className="w-full p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                                <option value="intermedia">Intermedia (Bs. {tasaIntermedia})</option>
+                                                <option value="dolar">BCV Dólar (Bs. {tasaDolarBCV})</option>
+                                                <option value="euro">BCV Euro (Bs. {tasaEuroBCV})</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {montoConversor && (
+                                    <div className="bg-gradient-to-br from-kreatiaPink to-kreatiaPurple text-white p-4 rounded-2xl shadow-lg space-y-2.5">
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-pink-200">✨ Resultado de Conversión</h3>
+                                        {(() => {
+                                            const valor = parseFloat(montoConversor) || 0;
+                                            let tasaSeleccionada = tasaIntermedia;
+                                            if (tipoTasaUsada === 'dolar') tasaSeleccionada = tasaDolarBCV;
+                                            if (tipoTasaUsada === 'euro') tasaSeleccionada = tasaEuroBCV;
+
+                                            let resultado = 0;
+                                            let unidadDestino = '';
+
+                                            if (tipoMonedaConversor === 'USD') {
+                                                resultado = valor * tasaSeleccionada;
+                                                unidadDestino = 'Bolívares (Bs)';
+                                            } else {
+                                                resultado = tasaSeleccionada > 0 ? valor / tasaSeleccionada : 0;
+                                                unidadDestino = 'Dólares ($)';
+                                            }
+
+                                            return (
+                                                <div className="text-center py-2 space-y-1">
+                                                    <span className="text-xs text-pink-100 block">Equivalente a:</span>
+                                                    <span className="text-2xl font-black block">
+                                                        {tipoMonedaConversor === 'USD' ? `Bs. ${resultado.toFixed(2)}` : `$${resultado.toFixed(2)}`}
+                                                    </span>
+                                                    <span className="text-[10px] text-pink-200 block">Usando tasa {tipoTasaUsada} ({tasaSeleccionada})</span>
                                                 </div>
                                             );
                                         })()}
@@ -402,7 +475,7 @@
                     </main>
 
                     {/* Footer */}
-                    <footer class="p-3 text-center text-[10px] text-slate-400 border-t border-slate-100 bg-slate-50">
+                    <footer className="p-3 text-center text-[10px] text-slate-400 border-t border-slate-100 bg-slate-50">
                         KreatiaPay & Finanzas - Multi-usuario con Supabase
                     </footer>
                 </div>
