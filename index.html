@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KreatiaPay & Finanzas</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        kreatiaPink: '#db2777',
+                        kreatiaPurple: '#7c3aed',
+                        kreatiaLight: '#fdf4f8',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- React y Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-kreatiaLight min-h-screen text-slate-800 flex flex-col justify-center items-center p-0 sm:p-4">
+    <div id="root" class="w-full max-w-md bg-white shadow-2xl min-h-screen sm:min-h-[85vh] sm:rounded-3xl flex flex-col justify-between overflow-hidden"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // ==========================================
+        // CONFIGURACIÓN DE SUPABASE (Tus credenciales configuradas)
+        // ==========================================
+        const SUPABASE_URL = "https://mvclysiqiagyzlsyxczl.supabase.co"; 
+        const SUPABASE_ANON_KEY = "sb_publishable_sfYe2oi49EvMoNtWw00zwQ_3x35UXr6";
+
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        function App() {
+            const [session, setSession] = useState(null);
+            const [loadingAuth, setLoadingAuth] = useState(true);
+            const [authEmail, setAuthEmail] = useState('');
+            const [authPassword, setAuthPassword] = useState('');
+            const [isRegistering, setIsRegistering] = useState(false);
+            const [authError, setAuthError] = useState('');
+
+            // Estados de Tasas de Cambio
+            const [tasaDolarBCV, setTasaDolarBCV] = useState(36.5);
+            const [tasaEuroBCV, setTasaEuroBCV] = useState(39.8);
+            
+            // CÁLCULO AUTOMÁTICO DE TASA INTERMEDIA (Promedio Dólar y Euro BCV)
+            const tasaIntermedia = Number(((tasaDolarBCV + tasaEuroBCV) / 2).toFixed(2));
+
+            // Pestañas
+            const [activeTab, setActiveTab] = useState('finanzas');
+
+            // Datos Financieros
+            const [movimientos, setMovimientos] = useState([]);
+            const [deudas, setDeudas] = useState([
+                { id: 1, desc: 'Préstamo inicial', monto: 20.00, moneda: 'USD' }
+            ]);
+            const [papelera, setPapelera] = useState(null);
+
+            // Calculadora de precios
+            const [calcInsumo, setCalcInsumo] = useState('');
+            const [calcCantidad, setCalcCantidad] = useState(1);
+            const [calcMargen, setCalcMargen] = useState(30);
+
+            // Formulario de Transacción
+            const [nuevoDesc, setNuevoDesc] = useState('');
+            const [nuevoMonto, setNuevoMonto] = useState('');
+            const [nuevaMoneda, setNuevaMoneda] = useState('USD');
+            const [nuevoTipo, setNuevoTipo] = useState('ingreso');
+
+            useEffect(() => {
+                supabaseClient.auth.getSession().then(({ data: { session } }) => {
+                    setSession(session);
+                    setLoadingAuth(false);
+                });
+
+                const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+                    setSession(session);
+                });
+
+                return () => subscription.unsubscribe();
+            }, []);
+
+            const handleAuth = async (e) => {
+                e.preventDefault();
+                setAuthError('');
+                try {
+                    if (isRegistering) {
+                        const { error } = await supabaseClient.auth.signUp({ email: authEmail, password: authPassword });
+                        if (error) throw error;
+                        alert('¡Registro exitoso! Revisa tu correo o inicia sesión.');
+                    } else {
+                        const { error } = await supabaseClient.auth.signInWithPassword({ email: authEmail, password: authPassword });
+                        if (error) throw error;
+                    }
+                } catch (err) {
+                    setAuthError(err.message);
+                }
+            };
+
+            const logout = async () => {
+                await supabaseClient.auth.signOut();
+            };
+
+            const agregarMovimiento = (e) => {
+                e.preventDefault();
+                if (!nuevoDesc || !nuevoMonto) return;
+                const item = {
+                    id: Date.now(),
+                    tipo: nuevoTipo,
+                    desc: nuevoDesc,
+                    monto: parseFloat(nuevoMonto),
+                    moneda: nuevaMoneda,
+                    fecha: new Date().toISOString().split('T')[0]
+                };
+                setMovimientos([item, ...movimientos]);
+                setNuevoDesc('');
+                setNuevoMonto('');
+            };
+
+            const eliminarMovimiento = (id) => {
+                const itemABorrar = movimientos.find(m => m.id === id);
+                setPapelera(itemABorrar);
+                setMovimientos(movimientos.filter(m => m.id !== id));
+            };
+
+            const deshacerBorrado = () => {
+                if (papelera) {
+                    setMovimientos([papelera, ...movimientos]);
+                    setPapelera(null);
+                }
+            };
+
+            if (loadingAuth) {
+                return <div class="flex-1 flex justify-center items-center p-10 text-kreatiaPink font-bold">Cargando KreatiaPay... ✨</div>;
+            }
+
+            // PANTALLA DE AUTENTICACIÓN (LOGIN / REGISTRO MULTI-USUARIO)
+            if (!session) {
+                return (
+                    <div class="flex-1 flex flex-col justify-center p-6 bg-white">
+                        <div class="text-center mb-6">
+                            <h1 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-kreatiaPink to-kreatiaPurple">KreatiaPay ✨</h1>
+                            <p class="text-xs text-slate-500 mt-1">Tu plataforma financiera inteligente para Venezuela</p>
+                        </div>
+
+                        <form onSubmit={handleAuth} class="space-y-4">
+                            {authError && <div class="bg-rose-50 text-rose-600 p-3 rounded-xl text-xs">{authError}</div>}
+                            <div>
+                                <label class="text-xs font-bold text-slate-600 block mb-1">Correo electrónico</label>
+                                <input type="email" required value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="tucorreo@emprendimiento.com" class="w-full p-3 text-xs rounded-xl border border-slate-200 outline-none focus:border-kreatiaPink" />
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold text-slate-600 block mb-1">Contraseña</label>
+                                <input type="password" required value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="••••••••" class="w-full p-3 text-xs rounded-xl border border-slate-200 outline-none focus:border-kreatiaPink" />
+                            </div>
+                            <button type="submit" class="w-full bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white py-3 rounded-xl text-xs font-bold shadow-md hover:opacity-90 transition">
+                                {isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
+                            </button>
+                        </form>
+
+                        <div class="text-center mt-4">
+                            <button onClick={()=>setIsRegistering(!isRegistering)} class="text-xs text-kreatiaPurple font-semibold hover:underline">
+                                {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate aquí'}
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // APLICACIÓN PRINCIPAL (UNA VEZ LOGUEADO)
+            return (
+                <div class="flex flex-col justify-between h-full">
+                    {/* Encabezado */}
+                    <header class="bg-gradient-to-r from-kreatiaPink to-kreatiaPurple text-white p-5 sm:rounded-t-3xl shadow-lg">
+                        <div class="flex justify-between items-center mb-2">
+                            <h1 class="text-xl font-bold tracking-wide">KreatiaPay ✨</h1>
+                            <button onClick={logout} class="text-[10px] bg-white/20 px-2.5 py-1 rounded-full font-medium hover:bg-white/30 transition">Cerrar Sesión</button>
+                        </div>
+                        <p class="text-[11px] text-pink-100">Control inteligente de tasas y deudas al instante.</p>
+                        
+                        {/* Selector de Tasas + Tasa Intermedia Automática */}
+                        <div class="grid grid-cols-3 gap-2 mt-3 bg-white/10 p-2.5 rounded-xl backdrop-blur-sm text-center">
+                            <div>
+                                <span class="text-[10px] block text-pink-200">BCV Dólar</span>
+                                <input type="number" step="0.1" value={tasaDolarBCV} onChange={(e)=>setTasaDolarBCV(parseFloat(e.target.value)||0)} class="bg-transparent text-center font-bold text-xs w-full outline-none border-b border-white/30" />
+                            </div>
+                            <div>
+                                <span class="text-[10px] block text-pink-200">BCV Euro</span>
+                                <input type="number" step="0.1" value={tasaEuroBCV} onChange={(e)=>setTasaEuroBCV(parseFloat(e.target.value)||0)} class="bg-transparent text-center font-bold text-xs w-full outline-none border-b border-white/30" />
+                            </div>
+                            <div>
+                                <span class="text-[10px] block text-pink-200">Intermedia (Auto)</span>
+                                <span class="text-sm font-black text-pink-300 block pt-1">Bs. {tasaIntermedia}</span>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Pestañas */}
+                    <div class="flex border-b border-slate-100">
+                        <button onClick={()=>setActiveTab('finanzas')} class={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='finanzas' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
+                            💰 Finanzas & Deudas
+                        </button>
+                        <button onClick={()=>setActiveTab('calculadora')} class={`flex-1 py-3 text-xs font-semibold text-center border-b-2 transition ${activeTab==='calculadora' ? 'border-kreatiaPink text-kreatiaPink' : 'border-transparent text-slate-400'}`}>
+                            📐 Calculadora Precios
+                        </button>
+                    </div>
+
+                    {/* Contenido */}
+                    <main class="p-4 flex-1 overflow-y-auto space-y-4">
+                        {activeTab === 'finanzas' ? (
+                            <div class="space-y-4">
+                                {papelera && (
+                                    <div class="bg-amber-50 border border-amber-200 p-3 rounded-xl flex justify-between items-center text-xs text-amber-800">
+                                        <span>Movimiento eliminado.</span>
+                                        <button onClick={deshacerBorrado} class="bg-amber-600 text-white px-3 py-1 rounded-lg font-bold">Deshacer</button>
+                                    </div>
+                                )}
+
+                                {/* Deudas */}
+                                <div class="bg-purple-50 p-3.5 rounded-2xl border border-purple-100">
+                                    <h2 class="text-xs font-bold uppercase tracking-wider text-kreatiaPurple mb-2">📌 Deudas Pendientes</h2>
+                                    {deudas.map(d => (
+                                        <div key={d.id} class="flex justify-between items-center bg-white p-2.5 rounded-xl shadow-sm text-xs">
+                                            <span class="text-slate-600">{d.desc}</span>
+                                            <span class="font-bold text-rose-600">${d.monto.toFixed(2)} USD</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Formulario Transacción */}
+                                <form onSubmit={agregarMovimiento} class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2.5">
+                                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">➕ Registrar Transacción</h2>
+                                    <div class="flex gap-2">
+                                        <select value={nuevoTipo} onChange={(e)=>setNuevoTipo(e.target.value)} class="p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                            <option value="ingreso">Ingreso</option>
+                                            <option value="gasto">Gasto</option>
+                                        </select>
+                                        <input type="text" placeholder="Descripción (ej. Venta tazas)" value={nuevoDesc} onChange={(e)=>setNuevoDesc(e.target.value)} class="flex-1 p-2 text-xs rounded-xl border border-slate-200 outline-none" />
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <input type="number" step="0.01" placeholder="Monto" value={nuevoMonto} onChange={(e)=>setNuevoMonto(e.target.value)} class="flex-1 p-2 text-xs rounded-xl border border-slate-200 outline-none" />
+                                        <select value={nuevaMoneda} onChange={(e)=>setNuevaMoneda(e.target.value)} class="p-2 text-xs rounded-xl border border-slate-200 bg-white font-medium">
+                                            <option value="USD">USD ($)</option>
+                                            <option value="BS">Bolívares (Bs)</option>
+                                        </select>
+                                        <button type="submit" class="bg-kreatiaPink text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-pink-700 transition">Guardar</button>
+                                    </div>
+                                </form>
+
+                                {/* Historial */}
+                                <div>
+                                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">📜 Historial</h2>
+                                    <div class="space-y-2">
+                                        {movimientos.map(m => (
+                                            <div key={m.id} class="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                                <div>
+                                                    <p class="text-xs font-bold text-slate-700">{m.desc}</p>
+                                                    <span class="text-[10px] text-slate-400">{m.fecha}</span>
+                                                </div>
+                                                <div class="flex items-center gap-3">
+                                                    <span class={`text-xs font-bold ${m.tipo==='ingreso'?'text-emerald-600':'text-rose-600'}`}>
+                                                        {m.tipo==='ingreso'?'+':'-'}{m.monto.toFixed(2)} {m.moneda}
+                                                    </span>
+                                                    <button onClick={()=>eliminarMovimiento(m.id)} class="text-slate-300 hover:text-rose-500 text-xs font-bold">✕</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            /* Calculadora de Precios */
+                            <div class="space-y-4">
+                                <div class="bg-pink-50 p-4 rounded-2xl border border-pink-100 space-y-3">
+                                    <h2 class="text-xs font-bold uppercase tracking-wider text-kreatiaPink">💡 Calculadora Inteligente</h2>
+                                    <div>
+                                        <label class="text-[11px] font-bold text-slate-500 block mb-1">Costo total de insumos (USD):</label>
+                                        <input type="number" step="0.01" placeholder="Ej. 5.50" value={calcInsumo} onChange={(e)=>setCalcInsumo(e.target.value)} class="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                    </div>
+                                    <div>
+                                        <label class="text-[11px] font-bold text-slate-500 block mb-1">Piezas que salen del material:</label>
+                                        <input type="number" value={calcCantidad} onChange={(e)=>setCalcCantidad(Math.max(1, parseInt(e.target.value)||1))} class="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                    </div>
+                                    <div>
+                                        <label class="text-[11px] font-bold text-slate-500 block mb-1">Margen de ganancia (%):</label>
+                                        <input type="number" value={calcMargen} onChange={(e)=>setCalcMargen(parseFloat(e.target.value)||0)} class="w-full p-2.5 text-xs rounded-xl border border-slate-200 outline-none bg-white" />
+                                    </div>
+                                </div>
+
+                                {calcInsumo && (
+                                    <div class="bg-gradient-to-br from-kreatiaPurple to-indigo-900 text-white p-4 rounded-2xl shadow-lg space-y-2.5">
+                                        <h3 class="text-xs font-bold uppercase tracking-wider text-purple-200">✨ Precio sugerido por Unidad</h3>
+                                        {(() => {
+                                            const costoUnitario = (parseFloat(calcInsumo) || 0) / calcCantidad;
+                                            const precioUSD = costoUnitario * (1 + calcMargen / 100);
+                                            const precioBS = precioUSD * tasaIntermedia;
+
+                                            return (
+                                                <div class="space-y-2 text-xs">
+                                                    <div class="flex justify-between bg-white/10 p-2 rounded-xl">
+                                                        <span class="text-purple-200">Costo unitario real:</span>
+                                                        <span class="font-bold">${costoUnitario.toFixed(2)} USD</span>
+                                                    </div>
+                                                    <div class="flex justify-between bg-white/20 p-2.5 rounded-xl border border-white/20">
+                                                        <span class="font-bold">Precio de Venta (USD):</span>
+                                                        <span class="text-sm font-extrabold text-pink-300">${precioUSD.toFixed(2)}</span>
+                                                    </div>
+                                                    <div class="flex justify-between bg-white/10 p-2 rounded-xl">
+                                                        <span class="text-purple-200">En Bolívares (Tasa Intermedia):</span>
+                                                        <span class="font-bold">Bs. {precioBS.toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </main>
+
+                    {/* Footer */}
+                    <footer class="p-3 text-center text-[10px] text-slate-400 border-t border-slate-100 bg-slate-50">
+                        KreatiaPay & Finanzas - Multi-usuario con Supabase
+                    </footer>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
