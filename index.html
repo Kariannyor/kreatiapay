@@ -116,10 +116,12 @@
             const [filtroFechaInicio, setFiltroFechaInicio] = useState('');
             const [filtroFechaFin, setFiltroFechaFin] = useState('');
 
-            // Formularios
+            // Formularios Deudas y Abonos
             const [nuevoDeudaDesc, setNuevoDeudaDesc] = useState('');
             const [nuevoDeudaMonto, setNuevoDeudaMonto] = useState('');
+            const [montoAbono, setMontoAbono] = useState({});
             
+            // Formularios Transacciones
             const [nuevoDesc, setNuevoDesc] = useState('');
             const [nuevoMonto, setNuevoMonto] = useState('');
             const [nuevaMoneda, setNuevaMoneda] = useState('USD');
@@ -162,7 +164,6 @@
                 };
                 window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-                // Conexión en vivo con la API oficial del Banco Central de Venezuela
                 fetchTasasBCVOficiales();
 
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
@@ -184,7 +185,6 @@
                 };
             }, []);
 
-            // Consulta directa a la API abierta de bcv.today
             const fetchTasasBCVOficiales = async () => {
                 try {
                     setCargandoTasaBCV(true);
@@ -272,7 +272,7 @@
                 setInventario([]);
             };
 
-            // BOTÓN GUARDAR TRANSACCIÓN FUNCIONAL
+            // GUARDAR TRANSACCIÓN (Compatibilidad con 'desc' o 'descripcion')
             const agregarMovimiento = async (e) => {
                 e.preventDefault();
                 if (!nuevoDesc.trim() || !nuevoMonto || !session) return;
@@ -286,7 +286,17 @@
                     fecha: new Date().toISOString().split('T')[0]
                 };
 
-                const { data, error } = await supabaseClient.from('movimientos').insert([item]).select();
+                let { data, error } = await supabaseClient.from('movimientos').insert([item]).select();
+                
+                // Si la tabla usa 'descripcion' en lugar de 'desc'
+                if (error && error.message.includes("desc")) {
+                    delete item.desc;
+                    item.descripcion = nuevoDesc.trim();
+                    const resAlt = await supabaseClient.from('movimientos').insert([item]).select();
+                    data = resAlt.data;
+                    error = resAlt.error;
+                }
+
                 if (!error && data) {
                     setMovimientos([data[0], ...movimientos]);
                     setNuevoDesc('');
@@ -316,23 +326,76 @@
                 }
             };
 
+            // GESTIÓN DE DEUDAS Y ABONOS
             const agregarDeuda = async (e) => {
                 e.preventDefault();
-                if (!nuevoDeudaDesc || !nuevoDeudaMonto || !session) return;
+                if (!nuevoDeudaDesc.trim() || !nuevoDeudaMonto || !session) return;
 
                 const nuevaD = {
                     user_id: session.user.id,
-                    desc: nuevoDeudaDesc,
+                    desc: nuevoDeudaDesc.trim(),
                     monto: parseFloat(nuevoDeudaMonto),
                     moneda: 'USD'
                 };
 
-                const { data, error } = await supabaseClient.from('deudas').insert([nuevaD]).select();
+                let { data, error } = await supabaseClient.from('deudas').insert([nuevaD]).select();
+                if (error && error.message.includes("desc")) {
+                    delete nuevaD.desc;
+                    nuevaD.descripcion = nuevoDeudaDesc.trim();
+                    const resAlt = await supabaseClient.from('deudas').insert([nuevaD]).select();
+                    data = resAlt.data;
+                    error = resAlt.error;
+                }
+
                 if (!error && data) {
                     setDeudas([data[0], ...deudas]);
                     setNuevoDeudaDesc('');
                     setNuevoDeudaMonto('');
+                } else if (error) {
+                    alert('Error al guardar deuda: ' + error.message);
                 }
+            };
+
+            const abonarDeuda = async (deuda) => {
+                const abonoVal = parseFloat(montoAbono[deuda.id]);
+                if (!abonoVal || abonoVal <= 0) {
+                    alert('Ingresa un monto válido para abonar.');
+                    return;
+                }
+
+                if (abonoVal > deuda.monto) {
+                    alert('El abono no puede ser mayor al monto pendiente de la deuda.');
+                    return;
+                }
+
+                const nuevoMontoDeuda = deuda.monto - abonoVal;
+
+                if (nuevoMontoDeuda <= 0.01) {
+                    // Si se paga por completo, eliminamos o marcamos saldada
+                    await eliminarDeuda(deuda.id);
+                } else {
+                    // Actualizamos el monto restante en Supabase
+                    const { error } = await supabaseClient.from('deudas').update({ monto: nuevoMontoDeuda }).eq('id', deuda.id);
+                    if (!error) {
+                        setDeudas(deudas.map(d => d.id === deuda.id ? { ...d, monto: nuevoMontoDeuda } : d));
+                    }
+                }
+
+                // Registramos automáticamente el abono como un gasto en los movimientos financieros
+                const itemGasto = {
+                    user_id: session.user.id,
+                    tipo: 'gasto',
+                    desc: `Abono a deuda: ${deuda.desc || deuda.descripcion}`,
+                    monto: abonoVal,
+                    moneda: 'USD',
+                    fecha: new Date().toISOString().split('T')[0]
+                };
+                
+                await supabaseClient.from('movimientos').insert([itemGasto]);
+                cargarDatos(session.user.id);
+
+                // Limpiamos el input de abono de esa deuda
+                setMontoAbono({ ...montoAbono, [deuda.id]: '' });
             };
 
             const eliminarDeuda = async (id) => {
@@ -410,7 +473,6 @@
                 prod.nombre.toLowerCase().includes(busquedaInventario.toLowerCase())
             );
 
-            // BOTÓN EXPORTAR EXCEL (CSV) FUNCIONAL
             const exportarExcelCSV = () => {
                 if (movimientos.length === 0) {
                     alert('No hay movimientos registrados para exportar.');
@@ -419,7 +481,7 @@
                 
                 let csvContent = "\uFEFFFecha,Tipo,Descripcion,Monto,Moneda\r\n";
                 movimientos.forEach(m => {
-                    const descLimpia = `"${(m.desc || '').replace(/"/g, '""')}"`;
+                    const descLimpia = `"${(m.desc || m.descripcion || '').replace(/"/g, '""')}"`;
                     csvContent += `${m.fecha},${m.tipo},${descLimpia},${m.monto},${m.moneda}\r\n`;
                 });
 
@@ -578,19 +640,34 @@
                                     </div>
                                 )}
 
-                                <div className="bg-purple-50 p-3.5 rounded-3xl border border-purple-100 space-y-2">
-                                    <h2 className="text-xs font-extrabold uppercase tracking-wider text-kreatiaPurple mb-1">📌 Deudas Pendientes</h2>
+                                <div className="bg-purple-50 p-3.5 rounded-3xl border border-purple-100 space-y-3">
+                                    <h2 className="text-xs font-extrabold uppercase tracking-wider text-kreatiaPurple mb-1">📌 Deudas Pendientes y Abonos</h2>
                                     {deudas.map(d => (
-                                        <div key={d.id} className="flex justify-between items-center bg-white p-2.5 rounded-2xl shadow-sm text-xs">
-                                            <span className="text-slate-600 font-medium">{d.desc}</span>
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-bold text-rose-600">${d.monto.toFixed(2)} USD</span>
-                                                <button onClick={()=>eliminarDeuda(d.id)} className="text-slate-300 hover:text-rose-500 font-bold">✕</button>
+                                        <div key={d.id} className="bg-white p-3 rounded-2xl shadow-sm space-y-2 text-xs">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-700 font-bold">{d.desc || d.descripcion}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-extrabold text-rose-600">${d.monto.toFixed(2)} USD</span>
+                                                    <button onClick={()=>eliminarDeuda(d.id)} className="text-slate-300 hover:text-rose-500 font-bold">✕</button>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 items-center pt-1 border-t border-purple-50">
+                                                <input 
+                                                    type="number" 
+                                                    step="0.01" 
+                                                    placeholder="Monto a abonar $" 
+                                                    value={montoAbono[d.id] || ''} 
+                                                    onChange={(e)=>setMontoAbono({...montoAbono, [d.id]: e.target.value})} 
+                                                    className="flex-1 p-2 text-xs rounded-xl border border-purple-200 bg-slate-50 outline-none" 
+                                                />
+                                                <button onClick={()=>abonarDeuda(d)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-[11px] font-bold shadow transition">
+                                                    Abonar ✨
+                                                </button>
                                             </div>
                                         </div>
                                     ))}
                                     <form onSubmit={agregarDeuda} className="flex gap-2 pt-1">
-                                        <input type="text" placeholder="Nueva deuda" value={nuevoDeudaDesc} onChange={(e)=>setNuevoDeudaDesc(e.target.value)} className="flex-1 p-2.5 text-xs rounded-2xl border border-purple-200 bg-white outline-none" />
+                                        <input type="text" placeholder="Nueva deuda (ej. Proveedor)" value={nuevoDeudaDesc} onChange={(e)=>setNuevoDeudaDesc(e.target.value)} className="flex-1 p-2.5 text-xs rounded-2xl border border-purple-200 bg-white outline-none" />
                                         <input type="number" step="0.01" placeholder="Monto $" value={nuevoDeudaMonto} onChange={(e)=>setNuevoDeudaMonto(e.target.value)} className="w-20 p-2.5 text-xs rounded-2xl border border-purple-200 bg-white outline-none" />
                                         <button type="submit" className="bg-kreatiaPurple text-white px-3.5 py-2.5 rounded-2xl text-xs font-bold">+</button>
                                     </form>
@@ -640,7 +717,7 @@
                                             movimientosFiltrados.map(m => (
                                                 <div key={m.id} className="flex justify-between items-center bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
                                                     <div>
-                                                        <p className="text-xs font-bold text-slate-700">{m.desc}</p>
+                                                        <p className="text-xs font-bold text-slate-700">{m.desc || m.descripcion}</p>
                                                         <span className="text-[10px] text-slate-400">{m.fecha}</span>
                                                     </div>
                                                     <div className="flex items-center gap-3">
