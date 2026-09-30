@@ -85,7 +85,7 @@
             const [authPassword, setAuthPassword] = useState('');
             const [isRegistering, setIsRegistering] = useState(false);
             const [isRecovering, setIsRecovering] = useState(false);
-            const [paisRegistro, setPaisRegistro] = useState('VE'); // 'VE', 'CO', 'MX', 'CL', 'PE', 'ES', 'AR', 'US'
+            const [paisRegistro, setPaisRegistro] = useState('VE');
             const [authError, setAuthError] = useState('');
             const [authSuccessMsg, setAuthSuccessMsg] = useState('');
 
@@ -144,8 +144,10 @@
 
             useEffect(() => {
                 if ('serviceWorker' in navigator) {
-                    window.addEventListener('load', () => {
-                        navigator.serviceWorker.register('./sw.js').catch(() => {});
+                    window.navigator.serviceWorker.getRegistrations().then(registrations => {
+                        for(let registration of registrations) {
+                            registration.unregister();
+                        }
                     });
                 }
 
@@ -160,7 +162,7 @@
                 };
                 window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-                // Conectar API del Banco Central de Venezuela (BCV oficial)
+                // Conectar API del Banco Central de Venezuela oficial en tiempo real
                 fetchTasasBCVOficiales();
 
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
@@ -182,20 +184,20 @@
                 };
             }, []);
 
-            // Consumo de API del Banco Central de Venezuela en tiempo real
+            // Consulta directa a la API abierta de bcv.today
             const fetchTasasBCVOficiales = async () => {
                 try {
                     setCargandoTasaBCV(true);
-                    const response = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar/bcv');
+                    const response = await fetch('https://bcv.today/api/v1/rate.json', { cache: 'no-cache' });
                     if (response.ok) {
-                        const json = await response.json();
-                        if (json && json.monitors && json.monitors.bcv) {
-                            const bcvData = json.monitors.bcv;
-                            if (bcvData.price) setTasaDolarBCV(Number(bcvData.price));
+                        const data = await response.json();
+                        if (data && data.USD) {
+                            setTasaDolarBCV(Number(data.USD));
+                            if (data.EUR) setTasaEuroBCV(Number(data.EUR));
                         }
                     }
                 } catch (err) {
-                    // Respaldo automático si la API externa experimenta latencia
+                    // Mantiene respaldo predeterminado si hay fallos de red
                 } finally {
                     setCargandoTasaBCV(false);
                 }
@@ -877,7 +879,7 @@
                     </main>
 
                     <footer className="p-3 text-center text-[10px] text-slate-400 border-t border-slate-100 bg-slate-50 sm:rounded-b-3xl">
-                        KreatiaPay & Finanzas - Multi-País & BCV Oficial 🚀
+                        KreatiaPay & Finanzas - Multi-País & BCV Directo 🚀
                     </footer>
                 </div>
             );
