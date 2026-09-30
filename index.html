@@ -85,7 +85,7 @@
             const [authPassword, setAuthPassword] = useState('');
             const [isRegistering, setIsRegistering] = useState(false);
             const [isRecovering, setIsRecovering] = useState(false);
-            const [paisRegistro, setPaisRegistro] = useState('VE'); // 'VE' o 'OTRO'
+            const [paisRegistro, setPaisRegistro] = useState('VE');
             const [authError, setAuthError] = useState('');
             const [authSuccessMsg, setAuthSuccessMsg] = useState('');
 
@@ -160,7 +160,7 @@
                 };
                 window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-                // Obtener tasas BCV automáticas del día desde API pública oficial
+                // Conectar API del Banco Central de Venezuela (BCV)
                 fetchTasasBCVOficiales();
 
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
@@ -182,7 +182,6 @@
                 };
             }, []);
 
-            // Función para consultar la API del BCV en tiempo real
             const fetchTasasBCVOficiales = async () => {
                 try {
                     setCargandoTasaBCV(true);
@@ -195,7 +194,7 @@
                         }
                     }
                 } catch (err) {
-                    // Si falla la red, mantiene los valores por defecto o guardados
+                    // Mantiene respaldo local si hay problemas de red
                 } finally {
                     setCargandoTasaBCV(false);
                 }
@@ -261,7 +260,6 @@
                 setInventario([]);
             };
 
-            // Finanzas: Movimientos
             const agregarMovimiento = async (e) => {
                 e.preventDefault();
                 if (!nuevoDesc || !nuevoMonto || !session) return;
@@ -303,7 +301,6 @@
                 }
             };
 
-            // Deudas
             const agregarDeuda = async (e) => {
                 e.preventDefault();
                 if (!nuevoDeudaDesc || !nuevoDeudaMonto || !session) return;
@@ -328,7 +325,6 @@
                 if (!error) setDeudas(deudas.filter(d => d.id !== id));
             };
 
-            // Inventario
             const guardarProductoInventario = async (e) => {
                 e.preventDefault();
                 if (!invNombre || !invStock || !invCosto || !session) return;
@@ -439,7 +435,6 @@
                 );
             }
 
-            // PANTALLA DE AUTENTICACIÓN (LOGIN / REGISTRO / RECUPERACIÓN)
             if (!session) {
                 return (
                     <div className="flex-1 flex flex-col justify-center p-6 bg-white">
@@ -513,7 +508,6 @@
                             <button onClick={logout} className="text-[10px] bg-white/20 px-2.5 py-1 rounded-full font-medium hover:bg-white/30 transition">Salir</button>
                         </div>
                         
-                        {/* Tasas automáticas BCV */}
                         <div className="grid grid-cols-3 gap-2 mt-2 bg-white/10 p-2 rounded-2xl backdrop-blur-sm text-center border border-white/10">
                             <div>
                                 <span className="text-[10px] block text-pink-200">BCV Dólar {cargandoTasaBCV && '⏳'}</span>
@@ -530,7 +524,6 @@
                         </div>
                     </header>
 
-                    {/* Pestañas */}
                     <div className="flex border-b border-slate-100 bg-slate-50/60 overflow-x-auto text-[11px]">
                         <button onClick={()=>setActiveTab('finanzas')} className={`flex-1 py-2.5 px-2 font-bold text-center border-b-2 whitespace-nowrap transition ${activeTab==='finanzas' ? 'border-kreatiaPink text-kreatiaPink bg-white' : 'border-transparent text-slate-400'}`}>
                             💰 Finanzas
