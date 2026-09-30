@@ -94,8 +94,8 @@
             const [isOnline, setIsOnline] = useState(navigator.onLine);
 
             // Estados de Tasas de Cambio y BCV automático
-            const [tasaDolarBCV, setTasaDolarBCV] = useState(36.5);
-            const [tasaEuroBCV, setTasaEuroBCV] = useState(39.8);
+            const [tasaDolarBCV, setTasaDolarBCV] = useState(855.66);
+            const [tasaEuroBCV, setTasaEuroBCV] = useState(973.31);
             const [cargandoTasaBCV, setCargandoTasaBCV] = useState(false);
             const tasaIntermedia = Number(((tasaDolarBCV + tasaEuroBCV) / 2).toFixed(2));
 
@@ -162,7 +162,7 @@
                 };
                 window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-                // Conectar API del Banco Central de Venezuela oficial en tiempo real
+                // Conexión en vivo con la API oficial del Banco Central de Venezuela
                 fetchTasasBCVOficiales();
 
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
@@ -184,7 +184,7 @@
                 };
             }, []);
 
-            // Consulta directa a la API abierta de bcv.today
+            // Consumo de la API abierta de bcv.today
             const fetchTasasBCVOficiales = async () => {
                 try {
                     setCargandoTasaBCV(true);
@@ -197,7 +197,19 @@
                         }
                     }
                 } catch (err) {
-                    // Mantiene respaldo predeterminado si hay fallos de red
+                    // Si hay problemas de red, intenta con la API de respaldo de dolarvzla
+                    try {
+                        const resAlt = await fetch('https://rates.dolarvzla.com/bcv/current.json', { cache: 'no-cache' });
+                        if (resAlt.ok) {
+                            const jsonAlt = await resAlt.json();
+                            if (jsonAlt && jsonAlt.usd) {
+                                setTasaDolarBCV(Number(jsonAlt.usd));
+                                if (jsonAlt.eur) setTasaEuroBCV(Number(jsonAlt.eur));
+                            }
+                        }
+                    } catch (e) {
+                        // Mantiene tasa por defecto si no hay internet
+                    }
                 } finally {
                     setCargandoTasaBCV(false);
                 }
@@ -879,7 +891,7 @@
                     </main>
 
                     <footer className="p-3 text-center text-[10px] text-slate-400 border-t border-slate-100 bg-slate-50 sm:rounded-b-3xl">
-                        KreatiaPay & Finanzas - Multi-País & BCV Directo 🚀
+                        KreatiaPay & Finanzas - Multi-País & BCV Oficial Auto 🚀
                     </footer>
                 </div>
             );
